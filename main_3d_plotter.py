@@ -18,17 +18,17 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
     detail_dir = output_dir / f'{var_name}_3d_coastlines'
     detail_dir.mkdir(exist_ok=True)
     
-    # Create meshgrid for 3D plotting - REVERSE BOTH LATITUDE AND LONGITUDE ORDER
-    lon_2d, lat_2d = np.meshgrid(ds.longitude.values[::-1], ds.latitude.values[::-1])
+    # Create meshgrid for 3D plotting - NORMAL GEOGRAPHIC ORIENTATION
+    lon_2d, lat_2d = np.meshgrid(ds.longitude.values, ds.latitude.values)
     
     for i, lev_val in enumerate(ds.levels.values):
         try:
-            # Get 2D data slice and squeeze - REVERSE BOTH LATITUDE AND LONGITUDE ORDER
+            # Get 2D data slice and squeeze - NORMAL ORIENTATION
             data_slice = var_data.isel(levels=i).squeeze()
-            data_slice_reversed = data_slice.values[::-1, ::-1]  # Flip both dimensions
+            data_slice_normal = data_slice.values  # No reversal needed
             
             # Check if data is valid
-            if not has_valid_data_array(data_slice_reversed):
+            if not has_valid_data_array(data_slice_normal):
                 print(f"      Skipping channel {i+1} (level {lev_val}) - no valid data")
                 continue
             
@@ -38,7 +38,7 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
             ax = fig.add_subplot(111, projection='3d')
             
             # Find data range for positioning
-            data_min, data_max = get_safe_data_range_array(data_slice_reversed)
+            data_min, data_max = get_safe_data_range_array(data_slice_normal)
             data_range = data_max - data_min
             
             # Position wireframe map well below the data
@@ -49,7 +49,7 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
             
             # SECOND: Create the 3D data surface above the wireframe
             print("        Rendering 3D data surface...")
-            surf = ax.plot_surface(lon_2d, lat_2d, data_slice_reversed,
+            surf = ax.plot_surface(lon_2d, lat_2d, data_slice_normal,
                                   cmap='viridis', alpha=0.85,
                                   linewidth=0, antialiased=True,
                                   zorder=10)  # High zorder to be above wireframe
@@ -65,21 +65,21 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
             ax.set_xlabel('Longitude (°)', fontsize=12)
             ax.set_ylabel('Latitude (°)', fontsize=12)
             ax.set_zlabel(f'{var_name}', fontsize=12)
-            ax.set_title(f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D Surface with Coastlines', 
+            ax.set_title(f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D Surface with Coastlines (Normal Orientation)', 
                          fontsize=14, pad=20)
             
             # Set viewing angle to see both data and wireframe
             ax.view_init(elev=30, azim=45)
             
             # Add statistics box
-            stats_text = generate_stats_text_array(data_slice_reversed)
+            stats_text = generate_stats_text_array(data_slice_normal)
             ax.text2D(0.02, 0.98, stats_text, transform=ax.transAxes,
                       verticalalignment='top', fontsize=10,
                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.9),
                       zorder=200)
             
-            # Add coordinate info (showing reversed order)
-            coord_text = f"Lat: {ds.latitude.max().values:.1f}° to {ds.latitude.min().values:.1f}° (reversed)\nLon: {ds.longitude.max().values:.1f}° to {ds.longitude.min().values:.1f}° (reversed)"
+            # Add coordinate info (normal orientation)
+            coord_text = f"Lat: {ds.latitude.min().values:.1f}° to {ds.latitude.max().values:.1f}° (N at top)\nLon: {ds.longitude.min().values:.1f}° to {ds.longitude.max().values:.1f}° (E at right)"
             ax.text2D(0.98, 0.02, coord_text, transform=ax.transAxes,
                       verticalalignment='bottom', horizontalalignment='right', fontsize=9,
                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
@@ -99,19 +99,19 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
             continue
 
 def create_coastlines_basemap(ax, ds, z_level):
-    """Create coastlines wireframe basemap on bottom plane"""
+    """Create coastlines wireframe basemap on bottom plane with NORMAL orientation"""
     
     print("    Creating coastlines wireframe basemap...")
     
-    # Get coordinate bounds
-    lon_min, lon_max = ds.longitude.min().values, ds.longitude.max().values
-    lat_min, lat_max = ds.latitude.min().values, ds.latitude.max().values
+    # Get coordinate bounds - NORMAL GEOGRAPHIC ORIENTATION
+    lon_min, lon_max = ds.longitude.min().values, ds.longitude.max().values  # Normal order
+    lat_min, lat_max = ds.latitude.min().values, ds.latitude.max().values    # Normal order
     
     try:
-        # Add coordinate grid first
+        # Add coordinate grid first (with normal bounds)
         add_coordinate_grid_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
         
-        # Add coastlines
+        # Add coastlines (with normal bounds)
         print("      Adding Natural Earth coastlines...")
         add_cartopy_coastlines_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
         
@@ -337,7 +337,7 @@ def main():
         print(f"   - {f}")
     
     print(f"\n🗺️  Creating 3D plots with coastlines wireframe only")
-    print(f"📊 Both latitudes AND longitudes will be displayed in REVERSED order")
+    print(f"📊 Normal geographic orientation (North at top, East at right)")
     print(f"📊 Output will be saved to: {output_directory}/")
     
     try:
@@ -372,7 +372,7 @@ def main():
         print(f"\n🎉 Processing complete!")
         print(f"📁 3D plots with coastlines saved to: {output_directory}/")
         print(f"\n✨ Features include:")
-        print(f"   • Reversed latitude AND longitude display")
+        print(f"   • Normal geographic orientation (North at top, East at right)")
         print(f"   • Natural Earth coastlines as black wireframe")
         print(f"   • Coordinate grid (lat/lon lines)")
         print(f"   • Your satellite data as surface above wireframe")
