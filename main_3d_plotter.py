@@ -7,10 +7,10 @@ import pandas as pd
 import glob
 
 # Import our custom modules
-from basemap_creation import create_offline_basemap
+from basemap_creation import create_offline_basemap, create_simple_basemap
 from color_mapping import generate_stats_text
 
-def create_3d_plots_offline_natural_earth(ds, var_name, output_dir):
+def create_3d_plots_offline_natural_earth(ds, var_name, output_dir, use_simple_basemap=True):
     """Create 3D surface plots using offline Natural Earth features"""
     var_data = ds[var_name]
     
@@ -35,15 +35,19 @@ def create_3d_plots_offline_natural_earth(ds, var_name, output_dir):
             
             # Find data range for Z positioning with NaN handling
             data_min, data_max = get_safe_data_range(data_slice)
-            z_offset = data_min - (data_max - data_min) * 0.15
+            z_offset = data_min - (data_max - data_min) * 0.3  # Increased separation
             
-            # Create the main 3D surface
+            # Create basemap FIRST (so it renders below data)
+            if use_simple_basemap:
+                create_simple_basemap(ax, ds, z_offset)
+            else:
+                create_offline_basemap(ax, ds, z_offset)
+            
+            # Create the main 3D surface AFTER basemap (so it renders on top)
             surf = ax.plot_surface(lon_2d, lat_2d, data_slice.values,
-                                  cmap='viridis', alpha=0.85,
-                                  linewidth=0, antialiased=True)
-            
-            # Create offline Natural Earth basemap
-            create_offline_basemap(ax, ds, z_offset)
+                                  cmap='viridis', alpha=0.9,  # Increased alpha
+                                  linewidth=0, antialiased=True,
+                                  zorder=10)  # Higher zorder to ensure it's on top
             
             # Add colorbar
             cbar = fig.colorbar(surf, ax=ax, shrink=0.5, aspect=20, pad=0.1)
@@ -53,12 +57,17 @@ def create_3d_plots_offline_natural_earth(ds, var_name, output_dir):
             ax.set_xlabel('Longitude (°)', fontsize=12)
             ax.set_ylabel('Latitude (°)', fontsize=12)
             ax.set_zlabel(f'{var_name}', fontsize=12)
-            ax.set_title(f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D with Offline Natural Earth', 
+            
+            basemap_type = "Simple" if use_simple_basemap else "Detailed"
+            ax.set_title(f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D with {basemap_type} Basemap', 
                          fontsize=14, pad=20)
             
             # Set viewing angle and limits with safe values
-            ax.view_init(elev=35, azim=45)
-            ax.set_zlim(z_offset, data_max * 1.1)
+            ax.view_init(elev=30, azim=45)  # Slightly lower elevation angle
+            
+            # Set Z limits to ensure data is clearly above basemap
+            z_range = data_max - data_min
+            ax.set_zlim(z_offset - z_range * 0.1, data_max + z_range * 0.1)
             
             # Add statistics
             stats_text = generate_stats_text(data_slice)
@@ -67,7 +76,8 @@ def create_3d_plots_offline_natural_earth(ds, var_name, output_dir):
                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.9))
             
             # Save
-            filename = f'ch_{i+1:03d}_{var_name}_3d_offline_ne.png'
+            basemap_suffix = "simple" if use_simple_basemap else "detailed"
+            filename = f'ch_{i+1:03d}_{var_name}_3d_{basemap_suffix}.png'
             plt.savefig(detail_dir / filename, dpi=200, bbox_inches='tight')
             plt.close()
             
@@ -105,7 +115,7 @@ def get_safe_data_range(data_slice):
     
     return data_min, data_max
 
-def comprehensive_qc_viewer_offline_ne(file_list, output_dir='qc_review_offline_ne'):
+def comprehensive_qc_viewer_offline_ne(file_list, output_dir='qc_review_offline_ne', simple_basemap=True):
     """Main function using offline Natural Earth-style features"""
     
     output_path = Path(output_dir)
@@ -147,7 +157,8 @@ def comprehensive_qc_viewer_offline_ne(file_list, output_dir='qc_review_offline_
                 
                 print(f"      Data coverage: {total_valid:,} / {total_points:,} points ({100*total_valid/total_points:.1f}%)")
                 
-                create_3d_plots_offline_natural_earth(ds, var_name, file_output_dir)
+                create_3d_plots_offline_natural_earth(ds, var_name, file_output_dir, 
+                                                     use_simple_basemap=simple_basemap)
             
             ds.close()
             print(f"  ✓ 3D plots saved to {file_output_dir}")
@@ -163,8 +174,9 @@ def main():
     print("=" * 60)
     
     # Configuration
-    input_pattern = "merra2.*.nc4"  # Modified to catch more files
+    input_pattern = "merra2.*.nc4"
     output_directory = "qc_review_3d_realistic"
+    use_simple_basemap = True  # Set to False for detailed basemap
     
     # Find input files
     file_list = glob.glob(input_pattern)
@@ -178,11 +190,15 @@ def main():
     for f in file_list:
         print(f"   - {f}")
     
-    print(f"\n📊 Output will be saved to: {output_directory}/")
+    basemap_type = "simple (recommended)" if use_simple_basemap else "detailed"
+    print(f"\n📊 Using {basemap_type} basemap")
+    print(f"📊 Output will be saved to: {output_directory}/")
     
     # Process files
     try:
-        comprehensive_qc_viewer_offline_ne(file_list, output_dir=output_directory)
+        comprehensive_qc_viewer_offline_ne(file_list, 
+                                         output_dir=output_directory,
+                                         simple_basemap=use_simple_basemap)
         
         print(f"\n🎉 Processing complete!")
         print(f"📁 All 3D plots saved to: {output_directory}/")
