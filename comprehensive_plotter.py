@@ -5,8 +5,8 @@ import pandas as pd
 # Import 2D plotting functions
 from plot_2d_geographic import create_overview_plot_geographic, create_detailed_plots_geographic
 
-# Import 3D plotting functions  
-from main_3d_plotter import create_3d_plots_offline_natural_earth
+# Import 3D plotting functions - use the correct function name
+from main_3d_plotter import create_3d_plots_with_flat_map
 
 # Import QC utilities
 from qc_utilities import generate_stats_summary, create_qc_checklist
@@ -19,8 +19,8 @@ def create_comprehensive_plots(ds, var_name, output_dir):
     print(f"      Creating detailed 2D plots...")
     create_detailed_plots_geographic(ds, var_name, output_dir)
     
-    print(f"      Creating 3D plots with basemaps...")
-    create_3d_plots_offline_natural_earth(ds, var_name, output_dir)
+    print(f"      Creating 3D plots with flat map...")
+    create_3d_plots_with_flat_map(ds, var_name, output_dir)
 
 def comprehensive_qc_viewer(file_list, output_dir='comprehensive_qc_review'):
     """
@@ -58,6 +58,16 @@ def comprehensive_qc_viewer(file_list, output_dir='comprehensive_qc_review'):
             for var_name in plot_vars:
                 print(f"    Processing {var_name}...")
                 var_data = ds[var_name]
+                
+                # Check if variable has any valid data
+                total_valid = np.sum(~np.isnan(var_data.values))
+                total_points = var_data.size
+                
+                if total_valid == 0:
+                    print(f"      Skipping {var_name} - no valid data in any channel")
+                    continue
+                
+                print(f"      Data coverage: {total_valid:,} / {total_points:,} points ({100*total_valid/total_points:.1f}%)")
                 
                 # Create comprehensive plots
                 create_comprehensive_plots(ds, var_name, file_output_dir)
@@ -98,6 +108,6 @@ def comprehensive_qc_viewer(file_list, output_dir='comprehensive_qc_review'):
     print(f"\n📋 Generated visualizations per variable:")
     print(f"   • 2D Overview: All channels in one plot")
     print(f"   • 2D Detailed: Individual high-resolution plots per channel")
-    print(f"   • 3D Realistic: 3D surface plots with detailed basemaps")
+    print(f"   • 3D Flat Map: 3D surface plots with flat map projection on bottom")
     
     return output_path
