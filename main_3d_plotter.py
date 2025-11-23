@@ -1,137 +1,9 @@
-import xarray as xr
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import numpy as np
-from pathlib import Path
-import pandas as pd
-import glob
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-
-# Import our custom modules
-from color_mapping import generate_stats_text
-
-def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
-    """Create 3D surface plots with Cartopy wireframe projected on bottom plane"""
-    var_data = ds[var_name]
-    
-    detail_dir = output_dir / f'{var_name}_3d_cartopy_wireframe'
-    detail_dir.mkdir(exist_ok=True)
-    
-    # Create meshgrid for 3D plotting - REVERSE LATITUDE ORDER
-    lon_2d, lat_2d = np.meshgrid(ds.longitude.values, ds.latitude.values[::-1])  # Reverse latitude
-    
-    for i, lev_val in enumerate(ds.levels.values):
-        try:
-            # Get 2D data slice and squeeze - REVERSE LATITUDE ORDER
-            data_slice = var_data.isel(levels=i).squeeze()
-            data_slice_reversed = data_slice.values[::-1, :]  # Flip latitude dimension
-            
-            # Check if data is valid
-            if not has_valid_data_array(data_slice_reversed):
-                print(f"      Skipping channel {i+1} (level {lev_val}) - no valid data")
-                continue
-            
-            print(f"      Creating 3D plot with Cartopy wireframe for channel {i+1}...")
-            
-            fig = plt.figure(figsize=(16, 12))
-            ax = fig.add_subplot(111, projection='3d')
-            
-            # Find data range for positioning
-            data_min, data_max = get_safe_data_range_array(data_slice_reversed)
-            data_range = data_max - data_min
-            
-            # Position wireframe map well below the data
-            map_z_level = data_min - data_range * 0.4
-            
-            # FIRST: Create Cartopy wireframe on bottom plane
-            create_cartopy_wireframe_basemap(ax, ds, map_z_level)
-            
-            # SECOND: Create the 3D data surface above the wireframe
-            print("        Rendering 3D data surface...")
-            surf = ax.plot_surface(lon_2d, lat_2d, data_slice_reversed,
-                                  cmap='viridis', alpha=0.85,
-                                  linewidth=0, antialiased=True,
-                                  zorder=10)  # High zorder to be above wireframe
-            
-            # Set Z limits to show both wireframe and data clearly
-            ax.set_zlim(map_z_level - data_range * 0.1, data_max + data_range * 0.1)
-            
-            # Add colorbar
-            cbar = fig.colorbar(surf, ax=ax, shrink=0.5, aspect=20, pad=0.1)
-            cbar.set_label(f'{var_name}', fontsize=12)
-            
-            # Set labels and title
-            ax.set_xlabel('Longitude (°)', fontsize=12)
-            ax.set_ylabel('Latitude (°)', fontsize=12)
-            ax.set_zlabel(f'{var_name}', fontsize=12)
-            ax.set_title(f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D Surface with Cartopy Wireframe Base', 
-                         fontsize=14, pad=20)
-            
-            # Set viewing angle to see both data and wireframe
-            ax.view_init(elev=30, azim=45)
-            
-            # Add statistics box
-            stats_text = generate_stats_text_array(data_slice_reversed)
-            ax.text2D(0.02, 0.98, stats_text, transform=ax.transAxes,
-                      verticalalignment='top', fontsize=10,
-                      bbox=dict(boxstyle='round', facecolor='white', alpha=0.9),
-                      zorder=200)
-            
-            # Add coordinate info
-            coord_text = f"Lat: {ds.latitude.max().values:.1f}° to {ds.latitude.min().values:.1f}° (reversed)\nLon: {ds.longitude.min().values:.1f}° to {ds.longitude.max().values:.1f}°"
-            ax.text2D(0.98, 0.02, coord_text, transform=ax.transAxes,
-                      verticalalignment='bottom', horizontalalignment='right', fontsize=9,
-                      bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-            
-            # Save
-            filename = f'ch_{i+1:03d}_{var_name}_3d_cartopy_wireframe.png'
-            plt.savefig(detail_dir / filename, dpi=200, bbox_inches='tight')
-            plt.close()
-            
-            print(f"        ✓ Saved 3D plot with Cartopy wireframe for channel {i+1}")
-            
-        except Exception as e:
-            print(f"      ✗ Error creating 3D plot for channel {i+1}: {e}")
-            import traceback
-            traceback.print_exc()
-            plt.close('all')
-            continue
-
-def create_cartopy_wireframe_basemap(ax, ds, z_level):
-    """Create wireframe basemap using Cartopy features projected on bottom plane"""
-    
-    print("    Creating Cartopy wireframe basemap...")
-    
-    # Get coordinate bounds
-    lon_min, lon_max = ds.longitude.min().values, ds.longitude.max().values
-    lat_min, lat_max = ds.latitude.min().values, ds.latitude.max().values
-    
-    try:
-        # Add Cartopy coastlines as wireframe
-        add_cartopy_coastlines_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
-        
-        # Add political boundaries as wireframe
-        add_cartopy_borders_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
-        
-        # Add rivers as wireframe
-        add_cartopy_rivers_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
-        
-        # Add coordinate grid
-        add_coordinate_grid_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
-        
-        print("      ✓ Cartopy wireframe basemap created successfully")
-        
-    except Exception as e:
-        print(f"      ✗ Cartopy wireframe failed: {e}, using simple grid")
-        # Fallback to simple grid
-        add_coordinate_grid_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
-
 def add_cartopy_coastlines_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level):
     """Add coastlines using Cartopy's Natural Earth data as wireframe"""
     
     try:
         import cartopy.io.shapereader as shpreader
+        from shapely.geometry import MultiLineString, LineString
         
         # Get Natural Earth coastlines
         coastlines_shp = shpreader.natural_earth(resolution='50m',
@@ -141,21 +13,13 @@ def add_cartopy_coastlines_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_l
         for record in shpreader.Reader(coastlines_shp).records():
             geometry = record.geometry
             
-            # Extract coordinates from geometry
-            if hasattr(geometry, 'coords'):
-                coords = list(geometry.coords)
-                lons, lats = zip(*coords)
-                
-                # Filter to our domain and plot as wireframe
-                plot_geometry_wireframe(ax, lons, lats, z_level, 'black', 0.8, lon_min, lon_max, lat_min, lat_max)
-                
-            elif hasattr(geometry, 'geoms'):
-                # Multi-geometry
-                for geom in geometry.geoms:
-                    if hasattr(geom, 'coords'):
-                        coords = list(geom.coords)
-                        lons, lats = zip(*coords)
-                        plot_geometry_wireframe(ax, lons, lats, z_level, 'black', 0.8, lon_min, lon_max, lat_min, lat_max)
+            # Handle different geometry types
+            coords_list = extract_coordinates_from_geometry(geometry)
+            
+            for coords in coords_list:
+                if len(coords) >= 2:  # Need at least 2 points for a line
+                    lons, lats = zip(*coords)
+                    plot_geometry_wireframe(ax, lons, lats, z_level, 'black', 0.8, lon_min, lon_max, lat_min, lat_max)
         
         print("        ✓ Coastlines added")
         
@@ -176,10 +40,13 @@ def add_cartopy_borders_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_leve
         for record in shpreader.Reader(borders_shp).records():
             geometry = record.geometry
             
-            if hasattr(geometry, 'coords'):
-                coords = list(geometry.coords)
-                lons, lats = zip(*coords)
-                plot_geometry_wireframe(ax, lons, lats, z_level, 'red', 0.6, lon_min, lon_max, lat_min, lat_max)
+            # Handle different geometry types
+            coords_list = extract_coordinates_from_geometry(geometry)
+            
+            for coords in coords_list:
+                if len(coords) >= 2:
+                    lons, lats = zip(*coords)
+                    plot_geometry_wireframe(ax, lons, lats, z_level, 'red', 0.6, lon_min, lon_max, lat_min, lat_max)
         
         print("        ✓ Political borders added")
         
@@ -202,180 +69,145 @@ def add_cartopy_rivers_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level
             if record.attributes.get('scalerank', 10) <= 4:
                 geometry = record.geometry
                 
-                if hasattr(geometry, 'coords'):
-                    coords = list(geometry.coords)
-                    lons, lats = zip(*coords)
-                    plot_geometry_wireframe(ax, lons, lats, z_level, 'blue', 0.5, lon_min, lon_max, lat_min, lat_max)
+                # Handle different geometry types
+                coords_list = extract_coordinates_from_geometry(geometry)
+                
+                for coords in coords_list:
+                    if len(coords) >= 2:
+                        lons, lats = zip(*coords)
+                        plot_geometry_wireframe(ax, lons, lats, z_level, 'blue', 0.5, lon_min, lon_max, lat_min, lat_max)
         
         print("        ✓ Major rivers added")
         
     except Exception as e:
         print(f"        ✗ Rivers failed: {e}")
 
+def extract_coordinates_from_geometry(geometry):
+    """Extract coordinate sequences from various geometry types"""
+    
+    coords_list = []
+    
+    try:
+        # Import shapely geometry types
+        from shapely.geometry import Point, LineString, Polygon, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection
+        
+        if isinstance(geometry, (Point, MultiPoint)):
+            # Skip points for wireframe
+            return coords_list
+            
+        elif isinstance(geometry, LineString):
+            # Single LineString
+            coords_list.append(list(geometry.coords))
+            
+        elif isinstance(geometry, Polygon):
+            # Polygon - use exterior ring
+            coords_list.append(list(geometry.exterior.coords))
+            
+        elif isinstance(geometry, MultiLineString):
+            # Multiple LineStrings
+            for line in geometry.geoms:
+                coords_list.append(list(line.coords))
+                
+        elif isinstance(geometry, MultiPolygon):
+            # Multiple Polygons - use exterior rings
+            for polygon in geometry.geoms:
+                coords_list.append(list(polygon.exterior.coords))
+                
+        elif isinstance(geometry, GeometryCollection):
+            # Collection of geometries
+            for geom in geometry.geoms:
+                coords_list.extend(extract_coordinates_from_geometry(geom))
+                
+        elif hasattr(geometry, 'coords'):
+            # Generic coordinate sequence
+            coords_list.append(list(geometry.coords))
+            
+        elif hasattr(geometry, 'geoms'):
+            # Generic multi-geometry
+            for geom in geometry.geoms:
+                coords_list.extend(extract_coordinates_from_geometry(geom))
+        
+    except Exception as e:
+        print(f"          Warning: Could not extract coordinates from geometry: {e}")
+    
+    return coords_list
+
 def plot_geometry_wireframe(ax, lons, lats, z_level, color, alpha, lon_min, lon_max, lat_min, lat_max):
     """Plot geometry coordinates as wireframe lines on the bottom plane"""
     
-    lons = np.array(lons)
-    lats = np.array(lats)
-    
-    # Filter to domain bounds with some buffer
-    buffer = 2.0  # degrees
-    mask = ((lons >= lon_min - buffer) & (lons <= lon_max + buffer) & 
-           (lats >= lat_min - buffer) & (lats <= lat_max + buffer))
-    
-    if np.sum(mask) >= 2:  # Need at least 2 points for a line
-        filtered_lons = lons[mask]
-        filtered_lats = lats[mask]
-        z_coords = np.full_like(filtered_lons, z_level)
+    try:
+        lons = np.array(lons)
+        lats = np.array(lats)
         
-        # Plot as wireframe line
-        ax.plot(filtered_lons, filtered_lats, z_coords,
-               color=color, linewidth=0.5, alpha=alpha, zorder=2)
+        # Filter to domain bounds with buffer
+        buffer = 5.0  # degrees
+        mask = ((lons >= lon_min - buffer) & (lons <= lon_max + buffer) & 
+               (lats >= lat_min - buffer) & (lats <= lat_max + buffer))
+        
+        if np.sum(mask) >= 2:  # Need at least 2 points for a line
+            filtered_lons = lons[mask]
+            filtered_lats = lats[mask]
+            z_coords = np.full_like(filtered_lons, z_level)
+            
+            # Split into segments if there are gaps (for better performance)
+            segments = split_into_segments(filtered_lons, filtered_lats, z_coords)
+            
+            for seg_lons, seg_lats, seg_z in segments:
+                if len(seg_lons) >= 2:
+                    ax.plot(seg_lons, seg_lats, seg_z,
+                           color=color, linewidth=0.5, alpha=alpha, zorder=2)
+    
+    except Exception as e:
+        # Skip problematic geometries silently
+        pass
 
-def add_coordinate_grid_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level):
-    """Add lat/lon coordinate grid as wireframe"""
+def split_into_segments(lons, lats, z_coords, max_gap=10.0):
+    """Split coordinates into segments when there are large gaps"""
     
-    # Determine appropriate spacing
-    lon_range = lon_max - lon_min
-    lat_range = lat_max - lat_min
+    segments = []
     
-    lon_spacing = 30 if lon_range > 120 else (15 if lon_range > 60 else 10)
-    lat_spacing = 30 if lat_range > 120 else (15 if lat_range > 60 else 10)
+    if len(lons) < 2:
+        return segments
     
-    # Longitude lines (meridians)
-    lon_lines = np.arange(-180, 181, lon_spacing)
-    lon_lines = lon_lines[(lon_lines >= lon_min - 10) & (lon_lines <= lon_max + 10)]
+    start_idx = 0
     
-    for lon in lon_lines:
-        lats = np.linspace(lat_min, lat_max, 100)
-        lons = np.full_like(lats, lon)
-        z_coords = np.full_like(lats, z_level)
-        ax.plot(lons, lats, z_coords, 'gray', linewidth=0.3, alpha=0.4, zorder=1)
+    for i in range(1, len(lons)):
+        # Calculate distance between consecutive points
+        dist = np.sqrt((lons[i] - lons[i-1])**2 + (lats[i] - lats[i-1])**2)
+        
+        if dist > max_gap:  # Large gap detected
+            # Save current segment
+            if i - start_idx >= 2:
+                segments.append((lons[start_idx:i], lats[start_idx:i], z_coords[start_idx:i]))
+            start_idx = i
     
-    # Latitude lines (parallels)
-    lat_lines = np.arange(-90, 91, lat_spacing)
-    lat_lines = lat_lines[(lat_lines >= lat_min - 10) & (lat_lines <= lat_max + 10)]
+    # Add final segment
+    if len(lons) - start_idx >= 2:
+        segments.append((lons[start_idx:], lats[start_idx:], z_coords[start_idx:]))
     
-    for lat in lat_lines:
-        lons = np.linspace(lon_min, lon_max, 100)
-        lats = np.full_like(lons, lat)
-        z_coords = np.full_like(lons, z_level)
-        ax.plot(lons, lats, z_coords, 'gray', linewidth=0.3, alpha=0.4, zorder=1)
+    return segments
 
-def has_valid_data_array(data_array):
-    """Check if data array has any valid (non-NaN) values"""
-    if data_array.size == 0:
-        return False
+def create_cartopy_wireframe_basemap(ax, ds, z_level):
+    """Create wireframe basemap using Cartopy features projected on bottom plane"""
     
-    valid_data = data_array[~np.isnan(data_array)]
-    return len(valid_data) > 0
-
-def get_safe_data_range_array(data_array):
-    """Get data range with proper NaN handling for numpy array"""
-    flat_data = data_array.flatten()
-    valid_data = flat_data[~np.isnan(flat_data)]
+    print("    Creating Cartopy wireframe basemap...")
     
-    if len(valid_data) == 0:
-        return 0.0, 1.0
-    
-    data_min = np.min(valid_data)
-    data_max = np.max(valid_data)
-    
-    if data_min == data_max:
-        if data_min == 0:
-            return -0.5, 0.5
-        else:
-            return data_min * 0.9, data_min * 1.1
-    
-    return data_min, data_max
-
-def generate_stats_text_array(data_array):
-    """Generate stats text for numpy array"""
-    flat_data = data_array.flatten()
-    valid_data = flat_data[~np.isnan(flat_data)]
-    
-    if len(valid_data) == 0:
-        return "No valid data"
-    
-    stats = f"""Statistics:
-Min: {np.min(valid_data):.3f}
-Max: {np.max(valid_data):.3f}
-Mean: {np.mean(valid_data):.3f}
-Std: {np.std(valid_data):.3f}
-Valid: {len(valid_data):,} / {len(flat_data):,}
-Coverage: {len(valid_data)/len(flat_data)*100:.1f}%"""
-    
-    return stats
-
-def main():
-    """Main execution function"""
-    print("🌍 3D Satellite Data Plotter with Cartopy Wireframe Base")
-    print("=" * 60)
-    
-    # Configuration
-    input_pattern = "merra2.*.nc4"
-    output_directory = "qc_review_3d_cartopy_wireframe"
-    
-    # Find input files
-    file_list = glob.glob(input_pattern)
-    
-    if not file_list:
-        print(f"❌ No files found matching pattern: {input_pattern}")
-        return
-    
-    print(f"📁 Found {len(file_list)} files to process:")
-    for f in file_list:
-        print(f"   - {f}")
-    
-    print(f"\n🗺️  Creating 3D plots with Cartopy wireframe basemap")
-    print(f"📊 Latitudes will be displayed in REVERSED order")
-    print(f"📊 Output will be saved to: {output_directory}/")
+    # Get coordinate bounds
+    lon_min, lon_max = ds.longitude.min().values, ds.longitude.max().values
+    lat_min, lat_max = ds.latitude.min().values, ds.latitude.max().values
     
     try:
-        output_path = Path(output_directory)
-        output_path.mkdir(exist_ok=True)
+        # Add coordinate grid first (always works)
+        add_coordinate_grid_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
         
-        for file_idx, netcdf_file in enumerate(file_list):
-            file_path = Path(netcdf_file)
-            print(f"\nProcessing {file_idx+1}/{len(file_list)}: {file_path.name}")
-            
-            try:
-                ds = xr.open_dataset(netcdf_file)
-                
-                file_output_dir = output_path / file_path.stem
-                file_output_dir.mkdir(exist_ok=True)
-                
-                plot_vars = [var for var in ds.data_vars 
-                            if all(dim in ds[var].dims for dim in ['latitude', 'longitude', 'levels'])]
-                
-                for var_name in plot_vars:
-                    var_data = ds[var_name]
-                    total_valid = np.sum(~np.isnan(var_data.values))
-                    
-                    if total_valid > 0:
-                        create_3d_plots_with_cartopy_wireframe(ds, var_name, file_output_dir)
-                
-                ds.close()
-                
-            except Exception as e:
-                print(f"  ✗ Error processing {file_path.name}: {e}")
+        # Try to add Cartopy features
+        print("      Adding Natural Earth features...")
+        add_cartopy_coastlines_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
+        add_cartopy_borders_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
+        add_cartopy_rivers_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
         
-        print(f"\n🎉 Processing complete!")
-        print(f"📁 3D plots with Cartopy wireframe saved to: {output_directory}/")
-        print(f"\n✨ Features include:")
-        print(f"   • Reversed latitude display (N-S flipped)")
-        print(f"   • Natural Earth coastlines as wireframe")
-        print(f"   • Political boundaries as red wireframe")
-        print(f"   • Major rivers as blue wireframe")
-        print(f"   • Coordinate grid (lat/lon lines)")
-        print(f"   • Your satellite data as surface above wireframe")
+        print("      ✓ Cartopy wireframe basemap created successfully")
         
-    except KeyboardInterrupt:
-        print("\n⏹️  Processing interrupted by user")
     except Exception as e:
-        print(f"\n❌ Error during processing: {e}")
-        import traceback
-        traceback.print_exc()
-
-if __name__ == "__main__":
-    main()
+        print(f"      ✗ Some Cartopy features failed: {e}")
+        print("      ✓ Coordinate grid still available")
