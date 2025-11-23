@@ -1,12 +1,13 @@
 import xarray as xr
 from pathlib import Path
 import pandas as pd
+import numpy as np
 
 # Import 2D plotting functions
 from plot_2d_geographic import create_overview_plot_geographic, create_detailed_plots_geographic
 
 # Import 3D plotting functions - use the correct function name
-from main_3d_plotter import create_3d_plots_with_flat_map
+from main_3d_plotter import create_3d_plots_with_cartopy_wireframe
 
 # Import QC utilities
 from qc_utilities import generate_stats_summary, create_qc_checklist
@@ -19,8 +20,8 @@ def create_comprehensive_plots(ds, var_name, output_dir):
     print(f"      Creating detailed 2D plots...")
     create_detailed_plots_geographic(ds, var_name, output_dir)
     
-    print(f"      Creating 3D plots with flat map...")
-    create_3d_plots_with_flat_map(ds, var_name, output_dir)
+    print(f"      Creating 3D plots with Cartopy wireframe...")
+    create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir)
 
 def comprehensive_qc_viewer(file_list, output_dir='comprehensive_qc_review'):
     """
@@ -42,7 +43,7 @@ def comprehensive_qc_viewer(file_list, output_dir='comprehensive_qc_review'):
             # Verify coordinate ranges
             print(f"  Coordinate ranges:")
             print(f"    Longitude: {ds.longitude.min().values:.2f}° to {ds.longitude.max().values:.2f}°")
-            print(f"    Latitude: {ds.latitude.min().values:.2f}° to {ds.latitude.max().values:.2f}°")
+            print(f"    Latitude: {ds.latitude.min().values:.2f}° to {ds.latitude.max().values:.2f}° (will be reversed in 3D)")
             print(f"    Levels: {len(ds.levels)} channels")
             
             # Create subdirectory for this file
@@ -107,7 +108,8 @@ def comprehensive_qc_viewer(file_list, output_dir='comprehensive_qc_review'):
     
     print(f"\n📋 Generated visualizations per variable:")
     print(f"   • 2D Overview: All channels in one plot")
-    print(f"   • 2D Detailed: Individual high-resolution plots per channel")
-    print(f"   • 3D Flat Map: 3D surface plots with flat map projection on bottom")
+    print(f"   • 2D Detailed: Individual high-resolution plots per channel") 
+    print(f"   • 3D Cartopy Wireframe: 3D surface with Natural Earth wireframe basemap")
+    print(f"   • Note: 3D plots display latitudes in REVERSED order")
     
     return output_path
