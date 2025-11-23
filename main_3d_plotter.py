@@ -21,50 +21,89 @@ def create_3d_plots_offline_natural_earth(ds, var_name, output_dir):
     lon_2d, lat_2d = np.meshgrid(ds.longitude.values, ds.latitude.values)
     
     for i, lev_val in enumerate(ds.levels.values):
-        fig = plt.figure(figsize=(16, 12))
-        ax = fig.add_subplot(111, projection='3d')
-        
-        # Get 2D data slice and squeeze
-        data_slice = var_data.isel(levels=i).squeeze()
-        
-        # Find data range for Z positioning
-        data_min = np.nanmin(data_slice.values)
-        data_max = np.nanmax(data_slice.values)
-        z_offset = data_min - (data_max - data_min) * 0.15
-        
-        # Create the main 3D surface
-        surf = ax.plot_surface(lon_2d, lat_2d, data_slice.values,
-                              cmap='viridis', alpha=0.85,
-                              linewidth=0, antialiased=True)
-        
-        # Create offline Natural Earth basemap
-        create_offline_basemap(ax, ds, z_offset)
-        
-        # Add colorbar
-        cbar = fig.colorbar(surf, ax=ax, shrink=0.5, aspect=20, pad=0.1)
-        cbar.set_label(f'{var_name}', fontsize=12)
-        
-        # Set labels and title
-        ax.set_xlabel('Longitude (°)', fontsize=12)
-        ax.set_ylabel('Latitude (°)', fontsize=12)
-        ax.set_zlabel(f'{var_name}', fontsize=12)
-        ax.set_title(f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D with Offline Natural Earth', 
-                     fontsize=14, pad=20)
-        
-        # Set viewing angle and limits
-        ax.view_init(elev=35, azim=45)
-        ax.set_zlim(z_offset, data_max * 1.1)
-        
-        # Add statistics
-        stats_text = generate_stats_text(data_slice)
-        ax.text2D(0.02, 0.98, stats_text, transform=ax.transAxes,
-                  verticalalignment='top', fontsize=10,
-                  bbox=dict(boxstyle='round', facecolor='white', alpha=0.9))
-        
-        # Save
-        filename = f'ch_{i+1:03d}_{var_name}_3d_offline_ne.png'
-        plt.savefig(detail_dir / filename, dpi=200, bbox_inches='tight')
-        plt.close()
+        try:
+            # Get 2D data slice and squeeze
+            data_slice = var_data.isel(levels=i).squeeze()
+            
+            # Check if data is valid
+            if not has_valid_data(data_slice):
+                print(f"      Skipping channel {i+1} (level {lev_val}) - no valid data")
+                continue
+            
+            fig = plt.figure(figsize=(16, 12))
+            ax = fig.add_subplot(111, projection='3d')
+            
+            # Find data range for Z positioning with NaN handling
+            data_min, data_max = get_safe_data_range(data_slice)
+            z_offset = data_min - (data_max - data_min) * 0.15
+            
+            # Create the main 3D surface
+            surf = ax.plot_surface(lon_2d, lat_2d, data_slice.values,
+                                  cmap='viridis', alpha=0.85,
+                                  linewidth=0, antialiased=True)
+            
+            # Create offline Natural Earth basemap
+            create_offline_basemap(ax, ds, z_offset)
+            
+            # Add colorbar
+            cbar = fig.colorbar(surf, ax=ax, shrink=0.5, aspect=20, pad=0.1)
+            cbar.set_label(f'{var_name}', fontsize=12)
+            
+            # Set labels and title
+            ax.set_xlabel('Longitude (°)', fontsize=12)
+            ax.set_ylabel('Latitude (°)', fontsize=12)
+            ax.set_zlabel(f'{var_name}', fontsize=12)
+            ax.set_title(f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D with Offline Natural Earth', 
+                         fontsize=14, pad=20)
+            
+            # Set viewing angle and limits with safe values
+            ax.view_init(elev=35, azim=45)
+            ax.set_zlim(z_offset, data_max * 1.1)
+            
+            # Add statistics
+            stats_text = generate_stats_text(data_slice)
+            ax.text2D(0.02, 0.98, stats_text, transform=ax.transAxes,
+                      verticalalignment='top', fontsize=10,
+                      bbox=dict(boxstyle='round', facecolor='white', alpha=0.9))
+            
+            # Save
+            filename = f'ch_{i+1:03d}_{var_name}_3d_offline_ne.png'
+            plt.savefig(detail_dir / filename, dpi=200, bbox_inches='tight')
+            plt.close()
+            
+        except Exception as e:
+            print(f"      Error creating 3D plot for channel {i+1}: {e}")
+            plt.close('all')  # Clean up any open figures
+            continue
+
+def has_valid_data(data_slice):
+    """Check if data slice has any valid (non-NaN) values"""
+    if data_slice.size == 0:
+        return False
+    
+    valid_data = data_slice.values[~np.isnan(data_slice.values)]
+    return len(valid_data) > 0
+
+def get_safe_data_range(data_slice):
+    """Get data range with proper NaN handling"""
+    flat_data = data_slice.values.flatten()
+    valid_data = flat_data[~np.isnan(flat_data)]
+    
+    if len(valid_data) == 0:
+        # No valid data - return default range
+        return 0.0, 1.0
+    
+    data_min = np.min(valid_data)
+    data_max = np.max(valid_data)
+    
+    # Handle edge case where min == max
+    if data_min == data_max:
+        if data_min == 0:
+            return -0.5, 0.5
+        else:
+            return data_min * 0.9, data_min * 1.1
+    
+    return data_min, data_max
 
 def comprehensive_qc_viewer_offline_ne(file_list, output_dir='qc_review_offline_ne'):
     """Main function using offline Natural Earth-style features"""
@@ -96,6 +135,18 @@ def comprehensive_qc_viewer_offline_ne(file_list, output_dir='qc_review_offline_
             
             for var_name in plot_vars:
                 print(f"    Creating 3D plots for {var_name}...")
+                
+                # Check if variable has any valid data across all levels
+                var_data = ds[var_name]
+                total_valid = np.sum(~np.isnan(var_data.values))
+                total_points = var_data.size
+                
+                if total_valid == 0:
+                    print(f"      Skipping {var_name} - no valid data in any channel")
+                    continue
+                
+                print(f"      Data coverage: {total_valid:,} / {total_points:,} points ({100*total_valid/total_points:.1f}%)")
+                
                 create_3d_plots_offline_natural_earth(ds, var_name, file_output_dir)
             
             ds.close()
@@ -112,7 +163,7 @@ def main():
     print("=" * 60)
     
     # Configuration
-    input_pattern = "merra2.mhs_metop-*.nc4"  # Modify this pattern as needed
+    input_pattern = "merra2.*.nc4"  # Modified to catch more files
     output_directory = "qc_review_3d_realistic"
     
     # Find input files
