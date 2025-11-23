@@ -5,53 +5,56 @@ import numpy as np
 from pathlib import Path
 import pandas as pd
 import glob
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 
 # Import our custom modules
 from color_mapping import generate_stats_text
 
-def create_3d_plots_with_flat_map(ds, var_name, output_dir):
-    """Create 3D surface plots with clean flat map projected on bottom plane"""
+def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
+    """Create 3D surface plots with Cartopy wireframe projected on bottom plane"""
     var_data = ds[var_name]
     
-    detail_dir = output_dir / f'{var_name}_3d_flat_map'
+    detail_dir = output_dir / f'{var_name}_3d_cartopy_wireframe'
     detail_dir.mkdir(exist_ok=True)
     
-    # Create meshgrid for 3D plotting
-    lon_2d, lat_2d = np.meshgrid(ds.longitude.values, ds.latitude.values)
+    # Create meshgrid for 3D plotting - REVERSE LATITUDE ORDER
+    lon_2d, lat_2d = np.meshgrid(ds.longitude.values, ds.latitude.values[::-1])  # Reverse latitude
     
     for i, lev_val in enumerate(ds.levels.values):
         try:
-            # Get 2D data slice and squeeze
+            # Get 2D data slice and squeeze - REVERSE LATITUDE ORDER
             data_slice = var_data.isel(levels=i).squeeze()
+            data_slice_reversed = data_slice.values[::-1, :]  # Flip latitude dimension
             
             # Check if data is valid
-            if not has_valid_data(data_slice):
+            if not has_valid_data_array(data_slice_reversed):
                 print(f"      Skipping channel {i+1} (level {lev_val}) - no valid data")
                 continue
             
-            print(f"      Creating 3D plot with clean flat map for channel {i+1}...")
+            print(f"      Creating 3D plot with Cartopy wireframe for channel {i+1}...")
             
             fig = plt.figure(figsize=(16, 12))
             ax = fig.add_subplot(111, projection='3d')
             
             # Find data range for positioning
-            data_min, data_max = get_safe_data_range(data_slice)
+            data_min, data_max = get_safe_data_range_array(data_slice_reversed)
             data_range = data_max - data_min
             
-            # Position flat map well below the data
+            # Position wireframe map well below the data
             map_z_level = data_min - data_range * 0.4
             
-            # FIRST: Create clean flat map on bottom plane
-            create_clean_flat_map(ax, ds, map_z_level)
+            # FIRST: Create Cartopy wireframe on bottom plane
+            create_cartopy_wireframe_basemap(ax, ds, map_z_level)
             
-            # SECOND: Create the 3D data surface above the map
+            # SECOND: Create the 3D data surface above the wireframe
             print("        Rendering 3D data surface...")
-            surf = ax.plot_surface(lon_2d, lat_2d, data_slice.values,
-                                  cmap='viridis', alpha=0.85,  # Semi-transparent to see map below
+            surf = ax.plot_surface(lon_2d, lat_2d, data_slice_reversed,
+                                  cmap='viridis', alpha=0.85,
                                   linewidth=0, antialiased=True,
-                                  zorder=10)  # High zorder to be above map
+                                  zorder=10)  # High zorder to be above wireframe
             
-            # Set Z limits to show both map and data clearly
+            # Set Z limits to show both wireframe and data clearly
             ax.set_zlim(map_z_level - data_range * 0.1, data_max + data_range * 0.1)
             
             # Add colorbar
@@ -62,25 +65,31 @@ def create_3d_plots_with_flat_map(ds, var_name, output_dir):
             ax.set_xlabel('Longitude (°)', fontsize=12)
             ax.set_ylabel('Latitude (°)', fontsize=12)
             ax.set_zlabel(f'{var_name}', fontsize=12)
-            ax.set_title(f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D Surface with Geographic Base Map', 
+            ax.set_title(f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D Surface with Cartopy Wireframe Base', 
                          fontsize=14, pad=20)
             
-            # Set viewing angle to see both data and map
+            # Set viewing angle to see both data and wireframe
             ax.view_init(elev=30, azim=45)
             
             # Add statistics box
-            stats_text = generate_stats_text(data_slice)
+            stats_text = generate_stats_text_array(data_slice_reversed)
             ax.text2D(0.02, 0.98, stats_text, transform=ax.transAxes,
                       verticalalignment='top', fontsize=10,
                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.9),
                       zorder=200)
             
+            # Add coordinate info
+            coord_text = f"Lat: {ds.latitude.max().values:.1f}° to {ds.latitude.min().values:.1f}° (reversed)\nLon: {ds.longitude.min().values:.1f}° to {ds.longitude.max().values:.1f}°"
+            ax.text2D(0.98, 0.02, coord_text, transform=ax.transAxes,
+                      verticalalignment='bottom', horizontalalignment='right', fontsize=9,
+                      bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            
             # Save
-            filename = f'ch_{i+1:03d}_{var_name}_3d_flat_map.png'
+            filename = f'ch_{i+1:03d}_{var_name}_3d_cartopy_wireframe.png'
             plt.savefig(detail_dir / filename, dpi=200, bbox_inches='tight')
             plt.close()
             
-            print(f"        ✓ Saved 3D plot with flat map for channel {i+1}")
+            print(f"        ✓ Saved 3D plot with Cartopy wireframe for channel {i+1}")
             
         except Exception as e:
             print(f"      ✗ Error creating 3D plot for channel {i+1}: {e}")
@@ -89,201 +98,181 @@ def create_3d_plots_with_flat_map(ds, var_name, output_dir):
             plt.close('all')
             continue
 
-def create_clean_flat_map(ax, ds, z_level):
-    """Create a clean flat map projection on the bottom plane"""
+def create_cartopy_wireframe_basemap(ax, ds, z_level):
+    """Create wireframe basemap using Cartopy features projected on bottom plane"""
     
-    print("    Creating clean flat map projection...")
+    print("    Creating Cartopy wireframe basemap...")
     
     # Get coordinate bounds
     lon_min, lon_max = ds.longitude.min().values, ds.longitude.max().values
     lat_min, lat_max = ds.latitude.min().values, ds.latitude.max().values
     
-    # Create a smooth ocean base first
-    create_ocean_base(ax, lon_min, lon_max, lat_min, lat_max, z_level)
-    
-    # Add continental outlines
-    add_continental_shapes(ax, lon_min, lon_max, lat_min, lat_max, z_level)
-    
-    # Add coastlines and borders
-    add_geographic_lines(ax, lon_min, lon_max, lat_min, lat_max, z_level)
-    
-    # Add coordinate grid
-    add_coordinate_grid(ax, lon_min, lon_max, lat_min, lat_max, z_level)
+    try:
+        # Add Cartopy coastlines as wireframe
+        add_cartopy_coastlines_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
+        
+        # Add political boundaries as wireframe
+        add_cartopy_borders_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
+        
+        # Add rivers as wireframe
+        add_cartopy_rivers_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
+        
+        # Add coordinate grid
+        add_coordinate_grid_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
+        
+        print("      ✓ Cartopy wireframe basemap created successfully")
+        
+    except Exception as e:
+        print(f"      ✗ Cartopy wireframe failed: {e}, using simple grid")
+        # Fallback to simple grid
+        add_coordinate_grid_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
 
-def create_ocean_base(ax, lon_min, lon_max, lat_min, lat_max, z_level):
-    """Create smooth ocean base"""
+def add_cartopy_coastlines_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level):
+    """Add coastlines using Cartopy's Natural Earth data as wireframe"""
     
-    # Create a simple grid for the ocean base
-    ocean_lons = np.array([lon_min, lon_max, lon_max, lon_min, lon_min])
-    ocean_lats = np.array([lat_min, lat_min, lat_max, lat_max, lat_min])
-    ocean_z = np.full_like(ocean_lons, z_level)
-    
-    # Plot ocean as a simple rectangle
-    ax.plot_surface(np.array([[lon_min, lon_max], [lon_min, lon_max]]),
-                   np.array([[lat_min, lat_min], [lat_max, lat_max]]),
-                   np.array([[z_level, z_level], [z_level, z_level]]),
-                   color='lightblue', alpha=0.6, shade=False, zorder=1)
+    try:
+        import cartopy.io.shapereader as shpreader
+        
+        # Get Natural Earth coastlines
+        coastlines_shp = shpreader.natural_earth(resolution='50m',
+                                                category='physical',
+                                                name='coastline')
+        
+        for record in shpreader.Reader(coastlines_shp).records():
+            geometry = record.geometry
+            
+            # Extract coordinates from geometry
+            if hasattr(geometry, 'coords'):
+                coords = list(geometry.coords)
+                lons, lats = zip(*coords)
+                
+                # Filter to our domain and plot as wireframe
+                plot_geometry_wireframe(ax, lons, lats, z_level, 'black', 0.8, lon_min, lon_max, lat_min, lat_max)
+                
+            elif hasattr(geometry, 'geoms'):
+                # Multi-geometry
+                for geom in geometry.geoms:
+                    if hasattr(geom, 'coords'):
+                        coords = list(geom.coords)
+                        lons, lats = zip(*coords)
+                        plot_geometry_wireframe(ax, lons, lats, z_level, 'black', 0.8, lon_min, lon_max, lat_min, lat_max)
+        
+        print("        ✓ Coastlines added")
+        
+    except Exception as e:
+        print(f"        ✗ Coastlines failed: {e}")
 
-def add_continental_shapes(ax, lon_min, lon_max, lat_min, lat_max, z_level):
-    """Add simplified continental shapes as filled areas"""
+def add_cartopy_borders_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level):
+    """Add political boundaries using Cartopy's Natural Earth data as wireframe"""
     
-    # Define major continental regions with approximate boundaries
-    continents = [
-        {
-            'name': 'North America',
-            'bounds': (-170, -50, 15, 75),
-            'color': 'lightgreen',
-            'alpha': 0.7
-        },
-        {
-            'name': 'South America', 
-            'bounds': (-85, -30, -60, 15),
-            'color': 'lightgreen',
-            'alpha': 0.7
-        },
-        {
-            'name': 'Europe',
-            'bounds': (-15, 50, 35, 75),
-            'color': 'wheat',
-            'alpha': 0.7
-        },
-        {
-            'name': 'Africa',
-            'bounds': (-20, 55, -40, 40),
-            'color': 'sandybrown', 
-            'alpha': 0.7
-        },
-        {
-            'name': 'Asia',
-            'bounds': (30, 180, 10, 80),
-            'color': 'tan',
-            'alpha': 0.7
-        },
-        {
-            'name': 'Australia',
-            'bounds': (110, 160, -45, -10),
-            'color': 'orange',
-            'alpha': 0.7
-        }
-    ]
-    
-    for continent in continents:
-        c_lon_min, c_lon_max, c_lat_min, c_lat_max = continent['bounds']
+    try:
+        import cartopy.io.shapereader as shpreader
         
-        # Check if continent intersects with our domain
-        if (c_lon_max >= lon_min and c_lon_min <= lon_max and
-            c_lat_max >= lat_min and c_lat_min <= lat_max):
+        # Get Natural Earth borders
+        borders_shp = shpreader.natural_earth(resolution='50m',
+                                            category='cultural',
+                                            name='admin_0_boundary_lines_land')
+        
+        for record in shpreader.Reader(borders_shp).records():
+            geometry = record.geometry
             
-            # Clip to our domain
-            plot_lon_min = max(c_lon_min, lon_min)
-            plot_lon_max = min(c_lon_max, lon_max)
-            plot_lat_min = max(c_lat_min, lat_min)
-            plot_lat_max = min(c_lat_max, lat_max)
-            
-            # Create continent rectangle
-            cont_lons = np.array([[plot_lon_min, plot_lon_max], 
-                                 [plot_lon_min, plot_lon_max]])
-            cont_lats = np.array([[plot_lat_min, plot_lat_min], 
-                                 [plot_lat_max, plot_lat_max]])
-            cont_z = np.full_like(cont_lons, z_level + 0.001)
-            
-            ax.plot_surface(cont_lons, cont_lats, cont_z,
-                           color=continent['color'], 
-                           alpha=continent['alpha'],
-                           shade=False, zorder=2)
+            if hasattr(geometry, 'coords'):
+                coords = list(geometry.coords)
+                lons, lats = zip(*coords)
+                plot_geometry_wireframe(ax, lons, lats, z_level, 'red', 0.6, lon_min, lon_max, lat_min, lat_max)
+        
+        print("        ✓ Political borders added")
+        
+    except Exception as e:
+        print(f"        ✗ Political borders failed: {e}")
 
-def add_geographic_lines(ax, lon_min, lon_max, lat_min, lat_max, z_level):
-    """Add coastlines, borders, and other geographic lines"""
+def add_cartopy_rivers_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level):
+    """Add major rivers using Cartopy's Natural Earth data as wireframe"""
     
-    # Major coastlines as simple line segments
-    coastlines = [
-        # US East Coast
-        {'lons': [-81, -75, -70], 'lats': [25, 40, 45], 'color': 'black', 'width': 1.5},
-        # US West Coast  
-        {'lons': [-125, -120, -115], 'lats': [30, 40, 50], 'color': 'black', 'width': 1.5},
-        # European Coast
-        {'lons': [-10, 0, 10], 'lats': [40, 50, 60], 'color': 'black', 'width': 1.5},
-        # Mediterranean
-        {'lons': [0, 10, 20, 30], 'lats': [35, 38, 35, 35], 'color': 'blue', 'width': 1.0},
-    ]
-    
-    for line in coastlines:
-        lons = np.array(line['lons'])
-        lats = np.array(line['lats'])
+    try:
+        import cartopy.io.shapereader as shpreader
         
-        # Filter to domain
-        mask = ((lons >= lon_min) & (lons <= lon_max) & 
-               (lats >= lat_min) & (lats <= lat_max))
+        # Get Natural Earth rivers
+        rivers_shp = shpreader.natural_earth(resolution='50m',
+                                           category='physical',
+                                           name='rivers_lake_centerlines')
         
-        if np.sum(mask) >= 2:  # Need at least 2 points for a line
-            filtered_lons = lons[mask]
-            filtered_lats = lats[mask]
-            z_coords = np.full_like(filtered_lons, z_level + 0.002)
-            
-            ax.plot(filtered_lons, filtered_lats, z_coords,
-                   color=line['color'], linewidth=line['width'], 
-                   alpha=0.8, zorder=3)
-    
-    # Political borders
-    borders = [
-        # US-Canada
-        {'lons': [-141, -95], 'lats': [49, 49], 'color': 'red', 'style': '--'},
-        # US-Mexico
-        {'lons': [-117, -97], 'lats': [32.5, 25.8], 'color': 'red', 'style': '--'},
-    ]
-    
-    for border in borders:
-        lons = np.array(border['lons'])
-        lats = np.array(border['lats'])
+        for record in shpreader.Reader(rivers_shp).records():
+            # Only major rivers
+            if record.attributes.get('scalerank', 10) <= 4:
+                geometry = record.geometry
+                
+                if hasattr(geometry, 'coords'):
+                    coords = list(geometry.coords)
+                    lons, lats = zip(*coords)
+                    plot_geometry_wireframe(ax, lons, lats, z_level, 'blue', 0.5, lon_min, lon_max, lat_min, lat_max)
         
-        mask = ((lons >= lon_min) & (lons <= lon_max) & 
-               (lats >= lat_min) & (lats <= lat_max))
+        print("        ✓ Major rivers added")
         
-        if np.any(mask):
-            filtered_lons = lons[mask]
-            filtered_lats = lats[mask]
-            z_coords = np.full_like(filtered_lons, z_level + 0.002)
-            
-            ax.plot(filtered_lons, filtered_lats, z_coords,
-                   color=border['color'], linestyle=border['style'], 
-                   linewidth=1.0, alpha=0.7, zorder=3)
+    except Exception as e:
+        print(f"        ✗ Rivers failed: {e}")
 
-def add_coordinate_grid(ax, lon_min, lon_max, lat_min, lat_max, z_level):
-    """Add lat/lon coordinate grid"""
+def plot_geometry_wireframe(ax, lons, lats, z_level, color, alpha, lon_min, lon_max, lat_min, lat_max):
+    """Plot geometry coordinates as wireframe lines on the bottom plane"""
+    
+    lons = np.array(lons)
+    lats = np.array(lats)
+    
+    # Filter to domain bounds with some buffer
+    buffer = 2.0  # degrees
+    mask = ((lons >= lon_min - buffer) & (lons <= lon_max + buffer) & 
+           (lats >= lat_min - buffer) & (lats <= lat_max + buffer))
+    
+    if np.sum(mask) >= 2:  # Need at least 2 points for a line
+        filtered_lons = lons[mask]
+        filtered_lats = lats[mask]
+        z_coords = np.full_like(filtered_lons, z_level)
+        
+        # Plot as wireframe line
+        ax.plot(filtered_lons, filtered_lats, z_coords,
+               color=color, linewidth=0.5, alpha=alpha, zorder=2)
+
+def add_coordinate_grid_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level):
+    """Add lat/lon coordinate grid as wireframe"""
+    
+    # Determine appropriate spacing
+    lon_range = lon_max - lon_min
+    lat_range = lat_max - lat_min
+    
+    lon_spacing = 30 if lon_range > 120 else (15 if lon_range > 60 else 10)
+    lat_spacing = 30 if lat_range > 120 else (15 if lat_range > 60 else 10)
     
     # Longitude lines (meridians)
-    lon_spacing = 30 if (lon_max - lon_min) > 60 else 15
     lon_lines = np.arange(-180, 181, lon_spacing)
-    lon_lines = lon_lines[(lon_lines >= lon_min) & (lon_lines <= lon_max)]
+    lon_lines = lon_lines[(lon_lines >= lon_min - 10) & (lon_lines <= lon_max + 10)]
     
     for lon in lon_lines:
-        lats = np.linspace(lat_min, lat_max, 50)
+        lats = np.linspace(lat_min, lat_max, 100)
         lons = np.full_like(lats, lon)
-        z_coords = np.full_like(lats, z_level + 0.001)
-        ax.plot(lons, lats, z_coords, 'gray', linewidth=0.5, alpha=0.5, zorder=2)
+        z_coords = np.full_like(lats, z_level)
+        ax.plot(lons, lats, z_coords, 'gray', linewidth=0.3, alpha=0.4, zorder=1)
     
     # Latitude lines (parallels)
-    lat_spacing = 30 if (lat_max - lat_min) > 60 else 15  
     lat_lines = np.arange(-90, 91, lat_spacing)
-    lat_lines = lat_lines[(lat_lines >= lat_min) & (lat_lines <= lat_max)]
+    lat_lines = lat_lines[(lat_lines >= lat_min - 10) & (lat_lines <= lat_max + 10)]
     
     for lat in lat_lines:
-        lons = np.linspace(lon_min, lon_max, 50)
+        lons = np.linspace(lon_min, lon_max, 100)
         lats = np.full_like(lons, lat)
-        z_coords = np.full_like(lons, z_level + 0.001)
-        ax.plot(lons, lats, z_coords, 'gray', linewidth=0.5, alpha=0.5, zorder=2)
+        z_coords = np.full_like(lons, z_level)
+        ax.plot(lons, lats, z_coords, 'gray', linewidth=0.3, alpha=0.4, zorder=1)
 
-def has_valid_data(data_slice):
-    """Check if data slice has any valid (non-NaN) values"""
-    if data_slice.size == 0:
+def has_valid_data_array(data_array):
+    """Check if data array has any valid (non-NaN) values"""
+    if data_array.size == 0:
         return False
     
-    valid_data = data_slice.values[~np.isnan(data_slice.values)]
+    valid_data = data_array[~np.isnan(data_array)]
     return len(valid_data) > 0
 
-def get_safe_data_range(data_slice):
-    """Get data range with proper NaN handling"""
-    flat_data = data_slice.values.flatten()
+def get_safe_data_range_array(data_array):
+    """Get data range with proper NaN handling for numpy array"""
+    flat_data = data_array.flatten()
     valid_data = flat_data[~np.isnan(flat_data)]
     
     if len(valid_data) == 0:
@@ -300,14 +289,32 @@ def get_safe_data_range(data_slice):
     
     return data_min, data_max
 
+def generate_stats_text_array(data_array):
+    """Generate stats text for numpy array"""
+    flat_data = data_array.flatten()
+    valid_data = flat_data[~np.isnan(flat_data)]
+    
+    if len(valid_data) == 0:
+        return "No valid data"
+    
+    stats = f"""Statistics:
+Min: {np.min(valid_data):.3f}
+Max: {np.max(valid_data):.3f}
+Mean: {np.mean(valid_data):.3f}
+Std: {np.std(valid_data):.3f}
+Valid: {len(valid_data):,} / {len(flat_data):,}
+Coverage: {len(valid_data)/len(flat_data)*100:.1f}%"""
+    
+    return stats
+
 def main():
     """Main execution function"""
-    print("🌍 3D Satellite Data Plotter with Clean Flat Map Base")
+    print("🌍 3D Satellite Data Plotter with Cartopy Wireframe Base")
     print("=" * 60)
     
     # Configuration
     input_pattern = "merra2.*.nc4"
-    output_directory = "qc_review_3d_clean_map"
+    output_directory = "qc_review_3d_cartopy_wireframe"
     
     # Find input files
     file_list = glob.glob(input_pattern)
@@ -320,7 +327,8 @@ def main():
     for f in file_list:
         print(f"   - {f}")
     
-    print(f"\n🗺️  Creating 3D plots with clean geographic base map")
+    print(f"\n🗺️  Creating 3D plots with Cartopy wireframe basemap")
+    print(f"📊 Latitudes will be displayed in REVERSED order")
     print(f"📊 Output will be saved to: {output_directory}/")
     
     try:
@@ -345,7 +353,7 @@ def main():
                     total_valid = np.sum(~np.isnan(var_data.values))
                     
                     if total_valid > 0:
-                        create_3d_plots_with_flat_map(ds, var_name, file_output_dir)
+                        create_3d_plots_with_cartopy_wireframe(ds, var_name, file_output_dir)
                 
                 ds.close()
                 
@@ -353,13 +361,14 @@ def main():
                 print(f"  ✗ Error processing {file_path.name}: {e}")
         
         print(f"\n🎉 Processing complete!")
-        print(f"📁 Clean 3D plots with geographic base saved to: {output_directory}/")
+        print(f"📁 3D plots with Cartopy wireframe saved to: {output_directory}/")
         print(f"\n✨ Features include:")
-        print(f"   • Light blue ocean base")
-        print(f"   • Continental shapes in different colors")
-        print(f"   • Major coastlines and political borders")
+        print(f"   • Reversed latitude display (N-S flipped)")
+        print(f"   • Natural Earth coastlines as wireframe")
+        print(f"   • Political boundaries as red wireframe")
+        print(f"   • Major rivers as blue wireframe")
         print(f"   • Coordinate grid (lat/lon lines)")
-        print(f"   • Your satellite data as transparent 3D surface above")
+        print(f"   • Your satellite data as surface above wireframe")
         
     except KeyboardInterrupt:
         print("\n⏹️  Processing interrupted by user")
