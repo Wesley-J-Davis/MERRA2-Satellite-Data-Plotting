@@ -45,7 +45,7 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
             data_range = data_max - data_min
             
             # Position wireframe map well below the data
-            map_z_level = 0 # data_min - data_range * 0.4
+            map_z_level = data_min - data_range * 0.4
             
             # FIRST: Create coastlines wireframe on bottom plane
             create_coastlines_basemap(ax, ds, map_z_level)
@@ -56,9 +56,12 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
                                   cmap='viridis', alpha=0.85,
                                   linewidth=0, antialiased=True,
                                   zorder=10)  # High zorder to be above wireframe
+
+            # THIRD: Create coastlines wireframe on top plane
+            create_coastlines_basemap(ax, ds, data_max + data_range * 0.1)
             
             # Set Z limits to show both wireframe and data clearly
-            ax.set_zlim(map_z_level - data_range * 0.1, data_max + data_range * 0.1)
+            ax.set_zlim(map_z_level - data_range * 0.1, data_max + data_range * 0.2)
             
             # Add colorbar
             cbar = fig.colorbar(surf, ax=ax, shrink=0.5, aspect=20, pad=0.1)
@@ -82,7 +85,37 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
                       verticalalignment='top', fontsize=10,
                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.9),
                       zorder=200)
-            
+            try:
+                # Create a small inset axes for the 2D image
+                from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+                # Create inset axes in top right corner (30% width, 25% height)
+                inset_ax = inset_axes(ax, width="30%", height="25%", 
+                         bbox_to_anchor=(0.98, 0.98), 
+                         bbox_transform=ax.transAxes,
+                         loc='upper right', borderpad=0)
+                #Display the 2D data as an image
+                im_2d = inset_ax.imshow(data_slice_normal, 
+                           cmap='viridis', 
+                           aspect='auto',
+                           origin='lower',  # Match 3D orientation
+                           extent=[ds.longitude.min().values, ds.longitude.max().values,
+                                  ds.latitude.min().values, ds.latitude.max().values])
+    
+                # Add title to the 2D inset
+                inset_ax.set_title(f'2D View\nCh {i+1}', fontsize=8, pad=2)
+                # Add minimal labels
+                inset_ax.set_xlabel('Lon', fontsize=6)
+                inset_ax.set_ylabel('Lat', fontsize=6)
+                inset_ax.tick_params(labelsize=5)
+    
+                # Add a small colorbar to the inset
+                cbar_inset = plt.colorbar(im_2d, ax=inset_ax, shrink=0.6, pad=0.02)
+                cbar_inset.ax.tick_params(labelsize=5)
+    
+                print("        ✓ Added 2D inset image")
+    
+            except Exception as e:
+                print(f"        ✗ Could not add 2D inset: {e}")
             # Add coordinate info
             coord_text = f"Lat: {ds.latitude.min().values:.1f}° to {ds.latitude.max().values:.1f}°\nLon: {ds.longitude.min().values:.1f}° to {ds.longitude.max().values:.1f}°"
             ax.text2D(0.98, 0.02, coord_text, transform=ax.transAxes,
