@@ -18,15 +18,15 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
     detail_dir = output_dir / f'{var_name}_3d_coastlines'
     detail_dir.mkdir(exist_ok=True)
     
-    # Create meshgrid for 3D plotting - NORMAL GEOGRAPHIC ORIENTATION
+    # Create meshgrid for 3D plotting - (reverse both axis arrays):
+    lon_2d, lat_2d = np.meshgrid(ds.longitude.values[::-1], ds.latitude.values[::-1])
     lon_2d, lat_2d = np.meshgrid(ds.longitude.values, ds.latitude.values)
     
     for i, lev_val in enumerate(ds.levels.values):
         try:
             # Get 2D data slice and squeeze - NORMAL ORIENTATION
             data_slice = var_data.isel(levels=i).squeeze()
-            data_slice_normal = data_slice.values  # No reversal needed
-            
+            data_slice_normal = data_slice.values[::-1, ::-1]
             # Check if data is valid
             if not has_valid_data_array(data_slice_normal):
                 print(f"      Skipping channel {i+1} (level {lev_val}) - no valid data")
@@ -69,7 +69,7 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
                          fontsize=14, pad=20)
             
             # Set viewing angle to see both data and wireframe
-            ax.view_init(elev=30, azim=45)
+            ax.view_init(elev=30, azim=60)
             
             # Add statistics box
             stats_text = generate_stats_text_array(data_slice_normal)
@@ -104,9 +104,8 @@ def create_coastlines_basemap(ax, ds, z_level):
     print("    Creating coastlines wireframe basemap...")
     
     # Get coordinate bounds - NORMAL GEOGRAPHIC ORIENTATION
-    lon_min, lon_max = ds.longitude.min().values, ds.longitude.max().values  # Normal order
-    lat_min, lat_max = ds.latitude.min().values, ds.latitude.max().values    # Normal order
-    
+    lon_min, lon_max = ds.longitude.max().values, ds.longitude.min().values  # Swapped for reversed axis
+    lat_min, lat_max = ds.latitude.max().values, ds.latitude.min().values 
     try:
         # Add coordinate grid first (with normal bounds)
         add_coordinate_grid_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
