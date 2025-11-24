@@ -57,11 +57,9 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
                                   linewidth=0, antialiased=True,
                                   zorder=10)  # High zorder to be above wireframe
 
-            # THIRD: Create coastlines wireframe on top plane
-            create_coastlines_basemap(ax, ds, data_max + data_range * 0.1)
-            
+           
             # Set Z limits to show both wireframe and data clearly
-            ax.set_zlim(map_z_level - data_range * 0.1, data_max + data_range * 0.2)
+            ax.set_zlim(map_z_level - data_range * 0.1, data_max + data_range * 0.1)
             
             # Add colorbar
             cbar = fig.colorbar(surf, ax=ax, shrink=0.5, aspect=20, pad=0.1)
@@ -77,7 +75,7 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
             ax.set_title(title, fontsize=14, pad=20)
             
             # Set viewing angle to see both data and wireframe
-            ax.view_init(elev=30, azim=45)
+            ax.view_init(elev=85, azim=225)
             
             # Add statistics box
             stats_text = generate_stats_text_array(data_slice_normal)
@@ -90,7 +88,7 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
                 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
                 # Create inset axes in top right corner (30% width, 25% height)
                 inset_ax = inset_axes(ax, width="30%", height="25%", 
-                         bbox_to_anchor=(0.98, 0.98), 
+                         bbox_to_anchor=(0.7, 0.75, 0.28, 0.23), 
                          bbox_transform=ax.transAxes,
                          loc='upper right', borderpad=0)
                 #Display the 2D data as an image
