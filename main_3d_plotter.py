@@ -45,7 +45,7 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
             data_range = data_max - data_min
             
             # Position wireframe map well below the data
-            map_z_level = data_min - data_range * 0.4
+            map_z_level = 0 # data_min - data_range * 0.4
             
             # FIRST: Create coastlines wireframe on bottom plane
             create_coastlines_basemap(ax, ds, map_z_level)
