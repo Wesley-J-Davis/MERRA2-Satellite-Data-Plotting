@@ -18,14 +18,18 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
     detail_dir = output_dir / f'{var_name}_3d_coastlines'
     detail_dir.mkdir(exist_ok=True)
     
-    # Create meshgrid for 3D plotting - (reverse both axis arrays):
-    lon_2d, lat_2d = np.meshgrid(ds.longitude.values[::-1], ds.latitude.values[::-1])
+    # Create meshgrid for 3D plotting - NORMAL ORIENTATION
+    lon_2d, lat_2d = np.meshgrid(ds.longitude.values, ds.latitude.values)
+    
+    # Extract date information from global attributes
+    date_info = extract_date_info(ds)
     
     for i, lev_val in enumerate(ds.levels.values):
         try:
             # Get 2D data slice and squeeze - NORMAL ORIENTATION
             data_slice = var_data.isel(levels=i).squeeze()
-            data_slice_normal = data_slice.values[::-1, ::-1]
+            data_slice_normal = data_slice.values
+            
             # Check if data is valid
             if not has_valid_data_array(data_slice_normal):
                 print(f"      Skipping channel {i+1} (level {lev_val}) - no valid data")
@@ -60,15 +64,17 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
             cbar = fig.colorbar(surf, ax=ax, shrink=0.5, aspect=20, pad=0.1)
             cbar.set_label(f'{var_name}', fontsize=12)
             
-            # Set labels and title
+            # Set labels and title with date information
             ax.set_xlabel('Longitude (°)', fontsize=12)
             ax.set_ylabel('Latitude (°)', fontsize=12)
             ax.set_zlabel(f'{var_name}', fontsize=12)
-            ax.set_title(f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D Surface with Coastlines (Normal Orientation)', 
-                         fontsize=14, pad=20)
+            
+            # Create title with date information
+            title = f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D Surface with Coastlines\n{date_info}'
+            ax.set_title(title, fontsize=14, pad=20)
             
             # Set viewing angle to see both data and wireframe
-            ax.view_init(elev=30, azim=60)
+            ax.view_init(elev=30, azim=45)
             
             # Add statistics box
             stats_text = generate_stats_text_array(data_slice_normal)
@@ -77,8 +83,8 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.9),
                       zorder=200)
             
-            # Add coordinate info (normal orientation)
-            coord_text = f"Lat: {ds.latitude.min().values:.1f}° to {ds.latitude.max().values:.1f}° (N at top)\nLon: {ds.longitude.min().values:.1f}° to {ds.longitude.max().values:.1f}° (E at right)"
+            # Add coordinate info
+            coord_text = f"Lat: {ds.latitude.min().values:.1f}° to {ds.latitude.max().values:.1f}°\nLon: {ds.longitude.min().values:.1f}° to {ds.longitude.max().values:.1f}°"
             ax.text2D(0.98, 0.02, coord_text, transform=ax.transAxes,
                       verticalalignment='bottom', horizontalalignment='right', fontsize=9,
                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
@@ -97,19 +103,74 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
             plt.close('all')
             continue
 
+def extract_date_info(ds):
+    """Extract date and time information from dataset global attributes"""
+    
+    try:
+        # Try to get date range information
+        if hasattr(ds, 'RangeBeginningDate') and hasattr(ds, 'RangeEndingDate'):
+            begin_date = ds.attrs.get('RangeBeginningDate', '')
+            end_date = ds.attrs.get('RangeEndingDate', '')
+            
+            # Format dates nicely
+            if begin_date and end_date:
+                if begin_date == end_date:
+                    return f"Date: {begin_date}"
+                else:
+                    return f"Date Range: {begin_date} to {end_date}"
+        
+        # Try alternative date fields
+        if hasattr(ds, 'ProductionDateTime'):
+            prod_date = ds.attrs.get('ProductionDateTime', '')
+            if prod_date:
+                # Extract just the date part (before 'T')
+                if 'T' in prod_date:
+                    date_part = prod_date.split('T')[0]
+                    return f"Production Date: {date_part}"
+                return f"Production Date: {prod_date}"
+        
+        # Try to extract from filename if present
+        if hasattr(ds, 'Filename'):
+            filename = ds.attrs.get('Filename', '')
+            if filename:
+                # Look for date pattern like 201808 or 2018-08
+                import re
+                date_match = re.search(r'(\d{4})(\d{2})', filename)
+                if date_match:
+                    year, month = date_match.groups()
+                    return f"Date: {year}-{month}"
+        
+        # Try GranuleID
+        if hasattr(ds, 'GranuleID'):
+            granule_id = ds.attrs.get('GranuleID', '')
+            if granule_id:
+                import re
+                date_match = re.search(r'(\d{4})(\d{2})', granule_id)
+                if date_match:
+                    year, month = date_match.groups()
+                    return f"Date: {year}-{month}"
+        
+        # Fallback - no date information found
+        return "Date: Not specified"
+        
+    except Exception as e:
+        print(f"    Warning: Could not extract date info: {e}")
+        return "Date: Unknown"
+
 def create_coastlines_basemap(ax, ds, z_level):
-    """Create coastlines wireframe basemap on bottom plane with NORMAL orientation"""
+    """Create coastlines wireframe basemap on bottom plane"""
     
     print("    Creating coastlines wireframe basemap...")
     
-    # Get coordinate bounds - NORMAL GEOGRAPHIC ORIENTATION
-    lon_min, lon_max = ds.longitude.max().values, ds.longitude.min().values  # Swapped for reversed axis
-    lat_min, lat_max = ds.latitude.max().values, ds.latitude.min().values 
+    # Get coordinate bounds - NORMAL ORIENTATION
+    lon_min, lon_max = ds.longitude.min().values, ds.longitude.max().values
+    lat_min, lat_max = ds.latitude.min().values, ds.latitude.max().values
+    
     try:
-        # Add coordinate grid first (with normal bounds)
+        # Add coordinate grid first
         add_coordinate_grid_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
         
-        # Add coastlines (with normal bounds)
+        # Add coastlines
         print("      Adding Natural Earth coastlines...")
         add_cartopy_coastlines_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level)
         
@@ -195,14 +256,10 @@ def plot_geometry_wireframe(ax, lons, lats, z_level, color, alpha, lon_min, lon_
         lons = np.array(lons)
         lats = np.array(lats)
         
-        #Handle reversed bounds (when min > max due to axis reversal)
-        actual_lon_min, actual_lon_max = min(lon_min, lon_max), max(lon_min, lon_max)
-        actual_lat_min, actual_lat_max = min(lat_min, lat_max), max(lat_min, lat_max)
-        
         # Filter to domain bounds with buffer
         buffer = 5.0
-        mask = ((lons >= actual_lon_min - buffer) & (lons <= actual_lon_max + buffer) & 
-               (lats >= actual_lat_min - buffer) & (lats <= actual_lat_max + buffer))
+        mask = ((lons >= lon_min - buffer) & (lons <= lon_max + buffer) & 
+               (lats >= lat_min - buffer) & (lats <= lat_max + buffer))
         
         if np.sum(mask) >= 2:
             filtered_lons = lons[mask]
@@ -245,33 +302,30 @@ def split_into_segments(lons, lats, z_coords, max_gap=10.0):
 
 def add_coordinate_grid_wireframe(ax, lon_min, lon_max, lat_min, lat_max, z_level):
     """Add lat/lon coordinate grid as wireframe"""
-    # Handle reversed bounds
-    actual_lon_min, actual_lon_max = min(lon_min, lon_max), max(lon_min, lon_max)
-    actual_lat_min, actual_lat_max = min(lat_min, lat_max), max(lat_min, lat_max)
     
     # Determine appropriate spacing
-    lon_range = actual_lon_max - actual_lon_min
-    lat_range = actual_lat_max - actual_lat_min
+    lon_range = lon_max - lon_min
+    lat_range = lat_max - lat_min
     
     lon_spacing = 30 if lon_range > 120 else (15 if lon_range > 60 else 10)
     lat_spacing = 30 if lat_range > 120 else (15 if lat_range > 60 else 10)
-   
+    
     # Longitude lines
     lon_lines = np.arange(-180, 181, lon_spacing)
-    lon_lines = lon_lines[(lon_lines >= actual_lon_min - 10) & (lon_lines <= actual_lon_max + 10)]
-      
+    lon_lines = lon_lines[(lon_lines >= lon_min - 10) & (lon_lines <= lon_max + 10)]
+    
     for lon in lon_lines:
-        lats = np.linspace(actual_lat_min, actual_lat_max, 100)
+        lats = np.linspace(lat_min, lat_max, 100)
         lons = np.full_like(lats, lon)
         z_coords = np.full_like(lats, z_level)
         ax.plot(lons, lats, z_coords, 'gray', linewidth=0.3, alpha=0.4, zorder=1)
     
     # Latitude lines
     lat_lines = np.arange(-90, 91, lat_spacing)
-    lat_lines = lat_lines[(lat_lines >= actual_lat_min - 10) & (lat_lines <= actual_lat_max + 10)]
+    lat_lines = lat_lines[(lat_lines >= lat_min - 10) & (lat_lines <= lat_max + 10)]
     
     for lat in lat_lines:
-        lons = np.linspace(actual_lon_min, actual_lon_max, 100)
+        lons = np.linspace(lon_min, lon_max, 100)
         lats = np.full_like(lons, lat)
         z_coords = np.full_like(lons, z_level)
         ax.plot(lons, lats, z_coords, 'gray', linewidth=0.3, alpha=0.4, zorder=1)
@@ -323,7 +377,7 @@ Coverage: {len(valid_data)/len(flat_data)*100:.1f}%"""
 
 def main():
     """Main execution function"""
-    print("🌍 3D Satellite Data Plotter with Coastlines Only")
+    print("🌍 3D Satellite Data Plotter with Coastlines")
     print("=" * 60)
     
     # Configuration
@@ -341,8 +395,9 @@ def main():
     for f in file_list:
         print(f"   - {f}")
     
-    print(f"\n🗺️  Creating 3D plots with coastlines wireframe only")
-    print(f"📊 Normal geographic orientation (North at top, East at right)")
+    print(f"\n🗺️  Creating 3D plots with coastlines wireframe")
+    print(f"📊 Normal geographic orientation (no coordinate reversals)")
+    print(f"📊 Including date information in titles")
     print(f"📊 Output will be saved to: {output_directory}/")
     
     try:
@@ -377,9 +432,10 @@ def main():
         print(f"\n🎉 Processing complete!")
         print(f"📁 3D plots with coastlines saved to: {output_directory}/")
         print(f"\n✨ Features include:")
-        print(f"   • Normal geographic orientation (North at top, East at right)")
-        print(f"   • Natural Earth coastlines as black wireframe")
+        print(f"   • Normal geographic orientation")
+        print(f"   • Natural Earth coastlines as wireframe")
         print(f"   • Coordinate grid (lat/lon lines)")
+        print(f"   • Date information in plot titles")
         print(f"   • Your satellite data as surface above wireframe")
         
     except KeyboardInterrupt:
