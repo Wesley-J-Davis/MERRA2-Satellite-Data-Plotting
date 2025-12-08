@@ -14,7 +14,6 @@ def validate_month(value):
     ivalue = int(value)
     if not (1 <= ivalue <= 12):
         raise argparse.ArgumentTypeError(f"Month must be between 1-12, got {ivalue}")
-    ivalue = str(value)
     return f"{ivalue:02d}"  # Returns zero-padded string
     
 def validate_tau(value):
