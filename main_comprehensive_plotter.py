@@ -8,9 +8,10 @@ def main():
     print("=" * 60)
     print("Creates both 2D geographic and 3D realistic basemap visualizations")
     print()
+    base_dir = "/discover/nobackup/projects/gmao/merra2/data/obs/.WORK/products_GES-DISC/"
     
     # Configuration
-    input_pattern = "merra2.mhs_metop-*.nc4"  # Modify this pattern as needed
+    input_pattern = base_dir + "merra2.mhs_metop-*.nc4"  # Modify this pattern as needed
     output_directory = "comprehensive_qc_review"
     
     # Find input files
