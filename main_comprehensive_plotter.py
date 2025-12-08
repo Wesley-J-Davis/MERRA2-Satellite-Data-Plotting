@@ -46,7 +46,8 @@ def main():
                         metavar='TAU',
                         default="")
     parser.add_argument('-plots_3d', '--plots_3d', action='store_true', help="this flag enables 3d plots")
-    
+    parser.add_argument('-y', '--yes', action='store_true',
+                        help='Skip confirmation prompts (for batch processing)')    
     args = parser.parse_args()
     
     """
@@ -90,14 +91,17 @@ def main():
     print(f"   • QC checklist for human review")
     
     # Ask for confirmation
-    try:
-        response = input(f"\nProceed with processing {len(file_list)} files? (y/N): ").strip().lower()
-        if response not in ['y', 'yes']:
-            print("Processing cancelled.")
+    if args.yes:
+        print(f"\nAutomatic confirmation: Processing {len(file_list)} files")
+    else:
+        try:
+            response = input(f"\nProceed with processing {len(file_list)} files? (y/N): ").strip().lower()
+            if response not in ['y', 'yes']:
+                print("Processing cancelled.")
+                return
+        except (KeyboardInterrupt, EOFError):
+            print("\nProcessing cancelled.")
             return
-    except KeyboardInterrupt:
-        print("\nProcessing cancelled.")
-        return
     
     # Process files
     try:
