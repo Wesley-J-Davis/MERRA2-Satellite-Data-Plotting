@@ -45,7 +45,7 @@ def main():
                         help='Tau value (00,06,12,18, returns _XX format)',
                         metavar='TAU',
                         default="")
-    parser.add_argument('-plots_3d', '--plots_3d', required=True, metavar='T/F',
+    parser.add_argument('-plots_3d', '--plots_3d', required=True, metavar='True/False',
                         default="False")
     
     args = parser.parse_args()
