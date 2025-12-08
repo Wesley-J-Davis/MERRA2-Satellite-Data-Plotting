@@ -61,7 +61,7 @@ def main():
     
     # Configuration using arguments
     input_pattern = f"{base_dir}/{args.satellite}/merra2.{args.satellite}.{args.year}{args.month}{args.tau}.nc4"
-    output_directory = f"comprehensive_qc_review/{args.satellite}/{args.year}/{args.month}"
+    output_directory = f"{base_dir}/comprehensive_qc_review/{args.satellite}/{args.year}/{args.month}"
     os.makedirs(output_directory, exist_ok=True)    
     # Find input files
     file_list = glob.glob(input_pattern)
