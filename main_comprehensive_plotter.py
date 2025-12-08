@@ -85,7 +85,8 @@ def main():
     print(f"\n🎨 Will create for each variable:")
     print(f"   • 2D Overview plots (all channels)")
     print(f"   • 2D Detailed plots (individual channels)")
-    print(f"   • 3D Surface plots with realistic basemaps")
+    if args.plot_3d == True:
+        print(f"   • 3D Surface plots with realistic basemaps")
     print(f"   • Statistical summaries")
     print(f"   • QC checklist for human review")
     
