@@ -45,6 +45,8 @@ def main():
                         help='Tau value (00,06,12,18, returns _XX format)',
                         metavar='TAU',
                         default="")
+    parser.add_argument('-3d', '--3d', required=False, metavar='T/F',
+                        default="False")
     
     args = parser.parse_args()
     
@@ -99,7 +101,7 @@ def main():
     
     # Process files
     try:
-        output_path = comprehensive_qc_viewer(file_list, output_dir=output_directory)
+        output_path = comprehensive_qc_viewer(file_list, output_dir=output_directory,3d=args.3d)
         
         print(f"\n🎉 Processing complete!")
         print(f"📁 All visualizations saved to: {output_path}/")
