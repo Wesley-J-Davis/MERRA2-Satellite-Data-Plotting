@@ -79,7 +79,7 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
             ax.set_zlabel(f'{var_name}', fontsize=12)
             
             # Create title with date information
-            title = f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D Surface with Coastlines\n{date_info}\n{file_name}'
+            title = f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D Surface with Coastlines\n{date_info} - {file_name}'
             ax.set_title(title, fontsize=14, pad=20)
             
             # Set viewing angle to see both data and wireframe
