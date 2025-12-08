@@ -5,12 +5,16 @@ import argparse
 import os
 
 def validate_year(value):
+    if not value: # If no value is provided
+        return "*" # select all years
     ivalue = int(value)
     if not (1900 <= ivalue <= 2099):
         raise argparse.ArgumentTypeError(f"Year must be between 1900-2099, got {ivalue}")
     return ivalue
 
 def validate_month(value):
+    if not value: # If not value is provided
+        return "*" # select all months
     ivalue = int(value)
     if not (1 <= ivalue <= 12):
         raise argparse.ArgumentTypeError(f"Month must be between 1-12, got {ivalue}")
@@ -18,11 +22,13 @@ def validate_month(value):
     
 def validate_tau(value):
     if not value:  # If no value is provided
-        return ""
+        return "" # select monthly 
+    if value.lower() == "all":
+        return "*" # this selects the combined monthly file
         
     ivalue = int(value)
     if ivalue in [0, 6, 12, 18]:
-        return f"_{ivalue:02d}z"
+        return f"_{ivalue:02d}z" # this selects the individual tau
     else:
         raise argparse.ArgumentTypeError(f"Tau must be one of: 0, 6, 12, 18, got {ivalue}")
         
