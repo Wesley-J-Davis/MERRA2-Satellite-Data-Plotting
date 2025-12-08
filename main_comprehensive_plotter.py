@@ -5,16 +5,14 @@ import argparse
 import os
 
 def validate_year(value):
-    if not value: # If no value is provided
-        return "*" # select all years
+
     ivalue = int(value)
     if not (1900 <= ivalue <= 2099):
         raise argparse.ArgumentTypeError(f"Year must be between 1900-2099, got {ivalue}")
     return ivalue
 
 def validate_month(value):
-    if not value: # If not value is provided
-        return "*" # select all months
+
     ivalue = int(value)
     if not (1 <= ivalue <= 12):
         raise argparse.ArgumentTypeError(f"Month must be between 1-12, got {ivalue}")
