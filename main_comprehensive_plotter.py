@@ -46,7 +46,7 @@ def main():
                         metavar='TAU',
                         default="")
     parser.add_argument('-plots_3d', '--plots_3d', required=True, metavar='True/False',
-                        default="False")
+                        default=False)
     
     args = parser.parse_args()
     
@@ -85,7 +85,7 @@ def main():
     print(f"\n🎨 Will create for each variable:")
     print(f"   • 2D Overview plots (all channels)")
     print(f"   • 2D Detailed plots (individual channels)")
-    if args.plots_3d == True:
+    if args.plots_3d:
         print(f"   • 3D Surface plots with realistic basemaps")
     print(f"   • Statistical summaries")
     print(f"   • QC checklist for human review")
