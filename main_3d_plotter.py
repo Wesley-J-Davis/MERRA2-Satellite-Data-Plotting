@@ -15,6 +15,7 @@ from color_mapping import generate_stats_text
 def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
     """Create 3D surface plots with Cartopy coastlines wireframe on bottom plane"""
     var_data = ds[var_name]
+    file_name = ds.attrs.get('GranuleID')
     
     detail_dir = output_dir / f'{var_name}_3d_coastlines'
     detail_dir.mkdir(exist_ok=True)
@@ -78,7 +79,7 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
             ax.set_zlabel(f'{var_name}', fontsize=12)
             
             # Create title with date information
-            title = f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D Surface with Coastlines\n{date_info}'
+            title = f'{var_name} - Channel {i+1} (Level: {lev_val})\n3D Surface with Coastlines\n{date_info}\n{file_name}'
             ax.set_title(title, fontsize=14, pad=20)
             
             # Set viewing angle to see both data and wireframe
