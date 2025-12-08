@@ -44,7 +44,7 @@ def comprehensive_qc_viewer(file_list, output_dir='comprehensive_qc_review',plot
             # Verify coordinate ranges
             print(f"  Coordinate ranges:")
             print(f"    Longitude: {ds.longitude.min().values:.2f}° to {ds.longitude.max().values:.2f}°")
-            print(f"    Latitude: {ds.latitude.min().values:.2f}° to {ds.latitude.max().values:.2f}° (will be reversed in 3D)")
+            print(f"    Latitude: {ds.latitude.min().values:.2f}° to {ds.latitude.max().values:.2f}°")
             print(f"    Levels: {len(ds.levels)} channels")
             
             # Create subdirectory for this file
@@ -111,6 +111,5 @@ def comprehensive_qc_viewer(file_list, output_dir='comprehensive_qc_review',plot
     print(f"   • 2D Overview: All channels in one plot")
     print(f"   • 2D Detailed: Individual high-resolution plots per channel") 
     print(f"   • 3D Cartopy Wireframe: 3D surface with Natural Earth wireframe basemap")
-    print(f"   • Note: 3D plots display latitudes in REVERSED order")
     
     return output_path
