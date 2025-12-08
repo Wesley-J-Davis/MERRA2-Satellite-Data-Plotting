@@ -24,7 +24,7 @@ def create_comprehensive_plots(ds, var_name, output_dir, plots_3d):
         print(f"      Creating 3D plots with Cartopy wireframe...")
         create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir)
 
-def comprehensive_qc_viewer(file_list, output_dir='comprehensive_qc_review',plots_3d):
+def comprehensive_qc_viewer(file_list, output_dir='comprehensive_qc_review',plots_3d=False):
     """
     Create comprehensive QC plots (both 2D and 3D) for all files
     """
