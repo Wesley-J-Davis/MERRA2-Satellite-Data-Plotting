@@ -22,9 +22,9 @@ def validate_month(value):
     
 def validate_tau(value):
     if not value:  # If no value is provided
-        return "" # select monthly 
+        return "*" # select monthly 
     if value.lower() == "all":
-        return "*" # this selects the combined monthly file
+        return "" # this selects the combined monthly file
         
     ivalue = int(value)
     if ivalue in [0, 6, 12, 18]:
