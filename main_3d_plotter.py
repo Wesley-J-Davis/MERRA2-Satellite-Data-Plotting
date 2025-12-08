@@ -7,6 +7,7 @@ import pandas as pd
 import glob
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+from matplotlib.ticker import MaxNLocator
 
 # Import our custom modules
 from color_mapping import generate_stats_text
@@ -59,7 +60,13 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
 
            
             # Set Z limits to show both wireframe and data clearly
-            ax.set_zlim(map_z_level - data_range * 0.1, data_max + data_range * 0.1)
+            z_padding = data_range * 0.3
+            ax.set_zlim(map_z_level - z_padding, data_max + z_padding)
+            ax.zaxis.set_major_locator(MaxNLocator(nbins=6))  # Limit to 6 tick marks maximum
+            ax.tick_params(axis='z', labelsize=10, pad=8)  # Bigger font, more padding
+
+            # Adjust subplot positioning
+            plt.subplots_adjust(left=0.1, right=0.95, top=0.9, bottom=0.1)
             
             # Add colorbar
             cbar = fig.colorbar(surf, ax=ax, shrink=0.5, aspect=20, pad=0.1)
@@ -75,7 +82,7 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
             ax.set_title(title, fontsize=14, pad=20)
             
             # Set viewing angle to see both data and wireframe
-            ax.view_init(elev=85, azim=225)
+            ax.view_init(elev=77, azim=225)
             
             # Add statistics box
             stats_text = generate_stats_text_array(data_slice_normal)
@@ -92,7 +99,7 @@ def create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir):
             
             # Save
             filename = f'ch_{i+1:03d}_{var_name}_3d_coastlines.png'
-            plt.savefig(detail_dir / filename, dpi=200, bbox_inches='tight')
+            plt.savefig(detail_dir / filename, dpi=200, bbox_inches='tight', pad_inches=0.2)
             plt.close()
             
             print(f"        ✓ Saved 3D plot with coastlines for channel {i+1}")
