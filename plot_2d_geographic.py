@@ -119,7 +119,7 @@ def create_overview_plot_geographic(ds, var_name, output_dir):
         cbar = fig.colorbar(last_valid_im, ax=axes[:i+1], shrink=0.6, pad=0.02)
         cbar.set_label(f'{var_name}')
     file_name = ds.attrs.get('GranuleID') 
-    plt.suptitle(f'{var_name} - All Channels (Geographic Projection)\n{file_name}', y=0.98)
+    plt.suptitle(f'{var_name} - All Channels (Geographic Projection) - {file_name}', y=0.98)
     
     # Save
     filename = f'{var_name}_overview_geographic.png'
