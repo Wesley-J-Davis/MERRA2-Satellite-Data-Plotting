@@ -118,7 +118,7 @@ def create_overview_plot_geographic(ds, var_name, output_dir):
         plt.tight_layout()
         cbar = fig.colorbar(last_valid_im, ax=axes[:i+1], shrink=0.6, pad=0.02)
         cbar.set_label(f'{var_name}')
-    file_name = ds.GranuleID
+    file_name = ds.attrs.get('GranuleID') 
     plt.suptitle(f'{var_name} - All Channels (Geographic Projection)\n{file_name}', y=0.98)
     
     # Save
@@ -186,8 +186,8 @@ Grid: {len(ds.longitude)} × {len(ds.latitude)}"""
             ax.text(0.98, 0.02, coord_text, transform=ax.transAxes,
                     verticalalignment='bottom', horizontalalignment='right', fontsize=9,
                     bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-            
-            plt.title(f'{var_name} - Channel {i+1} (Level: {lev_val})\nGeographic Projection (Lat/Lon)', 
+            file_name = ds.attrs.get('GranuleID')
+            plt.title(f'{var_name} - Channel {i+1} (Level: {lev_val})\nGeographic Projection (Lat/Lon)\n{file_name}', 
                      fontsize=14, pad=20)
             
             # Save
