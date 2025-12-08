@@ -1,19 +1,68 @@
 import glob
 from pathlib import Path
 from comprehensive_plotter import comprehensive_qc_viewer
+import argparse
+import os
 
+def validate_year(value):
+    ivalue = int(value)
+    if not (1900 <= ivalue <= 2099):
+        raise argparse.ArgumentTypeError(f"Year must be between 1900-2099, got {ivalue}")
+    return ivalue
+
+def validate_month(value):
+    ivalue = int(value)
+    if not (1 <= ivalue <= 12):
+        raise argparse.ArgumentTypeError(f"Month must be between 1-12, got {ivalue}")
+    return f"{ivalue:02d}"  # Returns zero-padded string
+    
+def validate_tau(value):
+    if not value:  # If no value is provided
+        return ""
+        
+    ivalue = int(value)
+    if ivalue in [0, 6, 12, 18]:
+        return f"_{ivalue:02d}"
+    else:
+        raise argparse.ArgumentTypeError(f"Tau must be one of: 0, 6, 12, 18, got {ivalue}")
+        
 def main():
     """Main execution function for comprehensive plotting"""
+    parser = argparse.ArgumentParser(description='Comprehensive Satellite Data QC Plotter')
+    parser.add_argument('-sat', '--satellite', required=True, 
+                        help='Satellite name (e.g., metop-a, metop-b, noaa-18)')
+    parser.add_argument('-year', '--year', required=True, type=validate_year,
+                        help='Year (4 digits, e.g., 2023)',
+                        metavar='YYYY')
+    parser.add_argument('-month', '--month', required=True, type=validate_month,
+                        help='Month (1-12, returns zero-padded)',
+                        metavar='MM')
+    parser.add_argument('-tau', '--tau', required=False, type=validate_tau,
+                        help='Tau value (00,06,12,18, returns _XX format)',
+                        metavar='TAU',
+                        default="")
+    
+    args = parser.parse_args()
+    
+    """
+    GIT-OPS/MERRA2-Satellite-Data-Plotting> ls /discover/nobackup/projects/gmao/merra2/data/obs/.WORK/products_GES-DISC/airs_aqua/merra2.airs_aqua.201301*
+    /discover/nobackup/projects/gmao/merra2/data/obs/.WORK/products_GES-DISC/airs_aqua/merra2.airs_aqua.201301_00z.nc4
+    /discover/nobackup/projects/gmao/merra2/data/obs/.WORK/products_GES-DISC/airs_aqua/merra2.airs_aqua.201301_06z.nc4
+    /discover/nobackup/projects/gmao/merra2/data/obs/.WORK/products_GES-DISC/airs_aqua/merra2.airs_aqua.201301_12z.nc4
+    /discover/nobackup/projects/gmao/merra2/data/obs/.WORK/products_GES-DISC/airs_aqua/merra2.airs_aqua.201301_18z.nc4
+    /discover/nobackup/projects/gmao/merra2/data/obs/.WORK/products_GES-DISC/airs_aqua/merra2.airs_aqua.201301.nc4
+    """
+
     print("🌍📊 Comprehensive Satellite Data QC Plotter")
     print("=" * 60)
     print("Creates both 2D geographic and 3D realistic basemap visualizations")
     print()
     base_dir = "/discover/nobackup/projects/gmao/merra2/data/obs/.WORK/products_GES-DISC/"
     
-    # Configuration
-    input_pattern = base_dir + "merra2.mhs_metop-*.nc4"  # Modify this pattern as needed
-    output_directory = "comprehensive_qc_review"
-    
+    # Configuration using arguments
+    input_pattern = f"{base_dir}merra2.{args.satellite}.{args.year}{args.month}{args.tau}.nc4"
+    output_directory = f"comprehensive_qc_review/{args.satellite}/{args.year}/{args.month:02d}"
+    os.makedirs(output_directory, exist_ok=True)    
     # Find input files
     file_list = glob.glob(input_pattern)
     
