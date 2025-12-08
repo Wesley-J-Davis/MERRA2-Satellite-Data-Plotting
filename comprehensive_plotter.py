@@ -12,7 +12,7 @@ from main_3d_plotter import create_3d_plots_with_cartopy_wireframe
 # Import QC utilities
 from qc_utilities import generate_stats_summary, create_qc_checklist
 
-def create_comprehensive_plots(ds, var_name, output_dir):
+def create_comprehensive_plots(ds, var_name, output_dir, plots_3d):
     """Create both 2D and 3D plots for a variable"""
     print(f"      Creating 2D overview plot...")
     create_overview_plot_geographic(ds, var_name, output_dir)
@@ -20,10 +20,11 @@ def create_comprehensive_plots(ds, var_name, output_dir):
     print(f"      Creating detailed 2D plots...")
     create_detailed_plots_geographic(ds, var_name, output_dir)
     
-    print(f"      Creating 3D plots with Cartopy wireframe...")
-    create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir)
+    if plots_3d == True:
+        print(f"      Creating 3D plots with Cartopy wireframe...")
+        create_3d_plots_with_cartopy_wireframe(ds, var_name, output_dir)
 
-def comprehensive_qc_viewer(file_list, output_dir='comprehensive_qc_review'):
+def comprehensive_qc_viewer(file_list, output_dir='comprehensive_qc_review',plots_3d):
     """
     Create comprehensive QC plots (both 2D and 3D) for all files
     """
@@ -71,7 +72,7 @@ def comprehensive_qc_viewer(file_list, output_dir='comprehensive_qc_review'):
                 print(f"      Data coverage: {total_valid:,} / {total_points:,} points ({100*total_valid/total_points:.1f}%)")
                 
                 # Create comprehensive plots
-                create_comprehensive_plots(ds, var_name, file_output_dir)
+                create_comprehensive_plots(ds, var_name, file_output_dir,plots_3d)
                 
                 # Generate statistics summary
                 stats = generate_stats_summary(var_data, var_name)
