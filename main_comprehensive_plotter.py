@@ -22,7 +22,7 @@ def validate_tau(value):
         
     ivalue = int(value)
     if ivalue in [0, 6, 12, 18]:
-        return f"_{ivalue:02d}"
+        return f"_{ivalue:02d}z"
     else:
         raise argparse.ArgumentTypeError(f"Tau must be one of: 0, 6, 12, 18, got {ivalue}")
         
