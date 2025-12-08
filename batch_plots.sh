@@ -47,7 +47,8 @@ python ./main_comprehensive_plotter.py \
   -year $YEAR \
   -month $MONTH \
   -tau $TAU \
-  -plots_3d
+  -plots_3d \
+  --yes
 
 # Print completion info
 echo "======================================"
