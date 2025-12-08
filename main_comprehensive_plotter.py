@@ -63,10 +63,10 @@ def main():
     print("=" * 60)
     print("Creates both 2D geographic and 3D realistic basemap visualizations")
     print()
-    base_dir = "/discover/nobackup/projects/gmao/merra2/data/obs/.WORK/products_GES-DISC/"
+    base_dir = "/discover/nobackup/projects/gmao/merra2/data/obs/.WORK/"
     
     # Configuration using arguments
-    input_pattern = f"{base_dir}/{args.satellite}/merra2.{args.satellite}.{args.year}{args.month}{args.tau}.nc4"
+    input_pattern = f"{base_dir}/products_GES-DISC/{args.satellite}/merra2.{args.satellite}.{args.year}{args.month}{args.tau}.nc4"
     output_directory = f"{base_dir}/comprehensive_qc_review/{args.satellite}/{args.year}/{args.month}"
     os.makedirs(output_directory, exist_ok=True)    
     # Find input files
